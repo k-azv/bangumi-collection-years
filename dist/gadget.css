@@ -1,0 +1,165 @@
+#bgm-collection-years {
+  --bgmcy-line: #e7e7e7;
+  --bgmcy-muted: #999;
+  --bgmcy-text: #555;
+  --bgmcy-pink: #f09199;
+  box-sizing: border-box;
+  margin: 0 0 20px;
+  color: var(--bgmcy-text);
+  font: 12px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+}
+
+#bgm-collection-years *,
+#bgm-collection-years *::before,
+#bgm-collection-years *::after { box-sizing: border-box; }
+
+#bgm-collection-years.bgmcy-card {
+  overflow: hidden;
+  border: 1px solid var(--bgmcy-line);
+  border-radius: 5px;
+  background: rgba(255, 255, 255, .78);
+}
+
+#bgm-collection-years .bgmcy-heading {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 10px 14px 8px;
+  border-bottom: 1px solid var(--bgmcy-line);
+  background: linear-gradient(#fff, #fafafa);
+}
+
+#bgm-collection-years h2 {
+  margin: 0;
+  color: #666;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+#bgm-collection-years .bgmcy-subtitle,
+#bgm-collection-years .bgmcy-status,
+#bgm-collection-years .bgmcy-note { color: var(--bgmcy-muted); }
+
+#bgm-collection-years .bgmcy-body { padding: 12px 14px 6px; }
+
+#bgm-collection-years .bgmcy-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 42px;
+  padding: 7px 14px;
+  border-top: 1px solid var(--bgmcy-line);
+}
+
+#bgm-collection-years .bgmcy-status { margin: 0; }
+#bgm-collection-years .bgmcy-load { flex: 0 0 auto; }
+
+#bgm-collection-years .bgmcy-tabs {
+  display: flex;
+  gap: 3px;
+  margin: -3px 0 12px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+#bgm-collection-years button { font: inherit; }
+
+#bgm-collection-years .bgmcy-tab,
+#bgm-collection-years .bgmcy-legend-item {
+  border: 0;
+  background: transparent;
+  color: #777;
+  cursor: pointer;
+}
+
+#bgm-collection-years .bgmcy-tab {
+  flex: 0 0 auto;
+  padding: 4px 9px;
+  border-radius: 12px;
+}
+
+#bgm-collection-years .bgmcy-tab:hover,
+#bgm-collection-years .bgmcy-tab:focus-visible { color: var(--bgmcy-pink); }
+
+#bgm-collection-years .bgmcy-tab.is-active {
+  background: var(--bgmcy-pink);
+  color: #fff;
+}
+
+#bgm-collection-years .bgmcy-summary {
+  display: flex;
+  align-items: baseline;
+  margin-bottom: 7px;
+}
+
+#bgm-collection-years .bgmcy-summary strong {
+  margin-right: 4px;
+  color: var(--bgmcy-pink);
+  font-size: 22px;
+  line-height: 1;
+}
+
+#bgm-collection-years .bgmcy-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 11px;
+  margin-bottom: 10px;
+}
+
+#bgm-collection-years .bgmcy-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 1px 0;
+  opacity: .42;
+}
+
+#bgm-collection-years .bgmcy-legend-item.is-active { opacity: 1; }
+#bgm-collection-years .bgmcy-legend-item:focus-visible { outline: 2px solid #7eb1d0; outline-offset: 2px; }
+
+#bgm-collection-years .bgmcy-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--bgmcy-color);
+}
+
+#bgm-collection-years .bgmcy-chart { display: grid; gap: 5px; }
+
+#bgm-collection-years .bgmcy-row {
+  display: grid;
+  grid-template-columns: 36px minmax(80px, 1fr) 28px;
+  align-items: center;
+  gap: 8px;
+  min-height: 16px;
+}
+
+#bgm-collection-years .bgmcy-row time { color: #777; font-variant-numeric: tabular-nums; }
+
+#bgm-collection-years .bgmcy-bar {
+  display: flex;
+  height: 10px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: #f1f1f1;
+}
+
+#bgm-collection-years .bgmcy-segment { min-width: 2px; height: 100%; }
+#bgm-collection-years .bgmcy-count { color: #888; text-align: right; font-variant-numeric: tabular-nums; }
+#bgm-collection-years .bgmcy-note,
+#bgm-collection-years .bgmcy-empty { margin: 6px 0 3px; }
+
+@media (max-width: 640px) {
+  #bgm-collection-years { margin-bottom: 12px; }
+  #bgm-collection-years .bgmcy-heading { display: block; padding-inline: 10px; }
+  #bgm-collection-years .bgmcy-subtitle { display: block; margin-top: 1px; }
+  #bgm-collection-years .bgmcy-body { padding-inline: 10px; }
+  #bgm-collection-years .bgmcy-actions { align-items: flex-start; padding-inline: 10px; }
+  #bgm-collection-years .bgmcy-status { max-width: 70%; }
+  #bgm-collection-years .bgmcy-row { grid-template-columns: 34px minmax(64px, 1fr) 24px; gap: 6px; }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  #bgm-collection-years .bgmcy-segment { transition: width .18s ease; }
+}
