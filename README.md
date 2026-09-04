@@ -19,9 +19,19 @@ npm install
 npm run check
 ```
 
+## 安装
+
+1. 登录 Bangumi 后打开[收藏作品年代组件页](https://bgm.tv/dev/app/7056)。
+2. 点击“启用”。
+3. 进入自己的用户主页或任意动画、书籍、音乐、游戏、三次元收藏列表页，点击“加载收藏统计”。
+
+组件维护者账号已经启用最新开发版本，可直接在 [kazv 的用户主页](https://bgm.tv/user/kazv) 使用。
+
 构建产物：
 
 - `dist/gadget.js`：粘贴到超合金组件版本的“脚本”。
 - `dist/gadget.css`：粘贴到超合金组件版本的“样式”。
 
 开发者可在未审核版本中直接使用并测试；组件公开发布需要 Bangumi 审核。
+
+真实站点验收记录见 [`docs/e2e.md`](docs/e2e.md)。
