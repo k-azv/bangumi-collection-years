@@ -20,7 +20,7 @@ export function histogramRows(rows, mode, decade = null) {
   const grouped = mode === 'decade' && decade === null;
   const step = grouped ? 10 : 1;
   const from = grouped ? Math.floor(min / 10) * 10 : decade ?? min;
-  const to = grouped ? Math.floor(max / 10) * 10 : decade === null ? max : Math.min(decade + 9, max);
+  const to = grouped ? Math.floor(max / 10) * 10 : decade === null ? max : decade + 9;
   return Array.from({ length: Math.floor((to - from) / step) + 1 }, (_, index) => {
     const year = from + index * step;
     let count = 0;
@@ -57,25 +57,24 @@ export function createHistogram(data, mode) {
   const output = node('output', { 'aria-live': 'polite' });
   const next = node('button', { type: 'button' }, '›');
   detail.append(previous, output, next);
-  const slider = node('input', { type: 'range', step: '1', 'aria-label': '选择年份' });
-  root.append(nav, plot, detail, slider);
+  const expand = node('button', { type: 'button', class: 'bgmcy-open-decade' });
+  root.append(nav, plot, detail, expand);
   let decade = null;
   let rows = histogramRows(data.rows, mode);
-  let selected = rows.reduce((a, b) => b.count > a.count ? b : a).year;
-  let geometry;
+  let selected = rows.findLast(row => row.count > 0)?.year ?? rows[0].year;
+  let hovered = null;
   let disposed = false;
 
   function updateSelection() {
     const grouped = mode === 'decade' && decade === null;
-    const row = rows.find(row => row.year === selected) || rows[0];
-    selected = row.year;
-    output.textContent = `${row.year}${grouped ? '年代' : '年'} · ${row.count} 部 · ${Number((row.count / data.total * 100).toFixed(1))}%`;
-    previous.disabled = row.year === rows[0].year;
-    next.disabled = row.year === rows.at(-1).year;
+    const row = rows.find(row => row.year === (hovered ?? selected)) || rows[0];
+    output.textContent = `${grouped ? `${row.year}—${row.year + 9} 年` : `${row.year} 年`} · ${row.count} 部 · ${(row.count / data.total * 100).toFixed(1)}%`;
+    previous.disabled = selected === rows[0].year;
+    next.disabled = selected === rows.at(-1).year;
     previous.setAttribute('aria-label', grouped ? '前一个年代' : '前一年');
     next.setAttribute('aria-label', grouped ? '后一个年代' : '后一年');
-    slider.value = selected;
-    svg.querySelectorAll('.bgmcy-column').forEach(bar => bar.classList.toggle('is-selected', Number(bar.dataset.year) === selected));
+    expand.textContent = `查看 ${selected}—${selected + 9} 各年`;
+    svg.querySelectorAll('.bgmcy-column').forEach(bar => bar.classList.toggle('is-selected', Number(bar.dataset.year) === row.year));
   }
   function draw() {
     if (disposed) return;
@@ -86,21 +85,14 @@ export function createHistogram(data, mode) {
     const plotWidth = Math.max(1, width - left - right), plotHeight = height - top - bottom;
     const step = plotWidth / rows.length;
     const max = Math.max(1, ...rows.map(row => row.count));
-    geometry = { left, step, plotWidth };
     period.textContent = `${rows[0].year}—${rows.at(-1).year + (grouped ? 9 : 0)}`;
     back.hidden = !grouped && mode === 'decade' ? false : true;
-    detail.hidden = grouped;
-    previous.hidden = mode === 'decade';
-    next.hidden = mode === 'decade';
-    slider.hidden = mode === 'decade';
-    targets.hidden = mode !== 'decade';
+    expand.hidden = !grouped;
     targets.replaceChildren();
     targets.style.gridTemplateColumns = `repeat(${rows.length}, minmax(0, 1fr))`;
-    slider.min = rows[0].year;
-    slider.max = rows.at(-1).year;
     svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
     svg.setAttribute('aria-label', `${period.textContent} ${grouped ? '年代' : '年份'}分布`);
-    svg.replaceChildren(svgNode('title', {}, `${period.textContent}作品分布`));
+    svg.replaceChildren();
     svg.append(svgNode('text', { x: left, y: 13 }, '作品数（部）'));
     for (const value of new Set([0, Math.ceil(max / 2), max])) {
       const y = top + plotHeight - value / max * plotHeight;
@@ -111,12 +103,12 @@ export function createHistogram(data, mode) {
     rows.forEach((row, index) => {
       const gap = Math.min(4, step * .3), x = left + index * step + gap / 2;
       const h = row.count / max * plotHeight;
-      if (mode === 'decade') {
-        const description = `${row.year}${grouped ? '年代' : '年'}，${row.count}部，占${Number((row.count / data.total * 100).toFixed(1))}%${grouped ? '，查看各年' : ''}`;
-        const button = node('button', { type: 'button', 'aria-label': description, title: description, 'data-year': row.year });
-        button.addEventListener('focus', () => { selected = row.year; updateSelection(); });
-        button.addEventListener('pointerenter', () => { selected = row.year; updateSelection(); });
-        button.addEventListener('click', () => { selected = row.year; if (grouped) openDecade(); else updateSelection(); });
+      {
+        const description = `${row.year}${grouped ? '年代' : '年'}，${row.count}部，占${Number((row.count / data.total * 100).toFixed(1))}%`;
+        const button = node('button', { type: 'button', 'aria-label': description, 'data-year': row.year });
+        button.addEventListener('focus', () => { hovered = null; selected = row.year; updateSelection(); });
+        button.addEventListener('pointerenter', event => { if (event.pointerType === 'mouse') { hovered = row.year; updateSelection(); } });
+        button.addEventListener('click', () => { hovered = null; selected = row.year; updateSelection(); });
         targets.append(button);
       }
       svg.append(svgNode('rect', { x, y: top + plotHeight - h, width: Math.max(.1, step - gap), height: h,
@@ -129,6 +121,7 @@ export function createHistogram(data, mode) {
     updateSelection();
   }
   function stepSelection(delta) {
+    hovered = null;
     const index = rows.findIndex(row => row.year === selected);
     selected = rows[Math.max(0, Math.min(rows.length - 1, index + delta))].year;
     updateSelection();
@@ -136,22 +129,20 @@ export function createHistogram(data, mode) {
   function openDecade() {
     if (mode !== 'decade' || decade !== null) return;
     decade = selected;
-    selected = histogramRows(data.rows, mode, decade).reduce((a, b) => b.count > a.count ? b : a).year;
+    hovered = null;
+    selected = histogramRows(data.rows, mode, decade).findLast(row => row.count > 0)?.year ?? decade;
     draw();
   }
   previous.addEventListener('click', () => stepSelection(-1));
   next.addEventListener('click', () => stepSelection(1));
-  slider.addEventListener('input', () => { selected = Number(slider.value); updateSelection(); });
-  back.addEventListener('click', () => { selected = decade; decade = null; draw(); });
-  function locate(event) {
-    const x = event.clientX - svg.getBoundingClientRect().left - geometry.left;
-    if (x < 0 || x > geometry.plotWidth) return false;
-    selected = rows[Math.min(rows.length - 1, Math.floor(x / geometry.step))].year;
-    updateSelection();
-    return true;
-  }
-  svg.addEventListener('pointermove', event => { if (event.pointerType === 'mouse') locate(event); });
-  svg.addEventListener('click', event => { if (locate(event)) openDecade(); });
+  expand.addEventListener('click', openDecade);
+  back.addEventListener('click', () => { hovered = null; selected = decade; decade = null; draw(); });
+  targets.addEventListener('pointerleave', () => { hovered = null; updateSelection(); });
+  root.addEventListener('keydown', event => {
+    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+    event.preventDefault();
+    stepSelection(event.key === 'ArrowLeft' ? -1 : 1);
+  });
   const observer = typeof ResizeObserver === 'function' ? new ResizeObserver(draw) : null;
   observer?.observe(svg);
   draw();

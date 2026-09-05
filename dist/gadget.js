@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bangumi 作品年份分布
 // @namespace    https://github.com/k-azv/bangumi-collection-years
-// @version      0.3.4
+// @version      0.3.5
 // @description  按作品发行年份查看动画、书籍、音乐、游戏与三次元收藏
 // @author       k-azv
 // @include      /^https?:\/\/(bgm\.tv|bangumi\.tv|chii\.in)\/user\/[^/?#]+\/?$/
@@ -232,7 +232,7 @@
     const grouped = mode === "decade" && decade === null;
     const step = grouped ? 10 : 1;
     const from = grouped ? Math.floor(min / 10) * 10 : decade ?? min;
-    const to = grouped ? Math.floor(max / 10) * 10 : decade === null ? max : Math.min(decade + 9, max);
+    const to = grouped ? Math.floor(max / 10) * 10 : decade === null ? max : decade + 9;
     return Array.from({ length: Math.floor((to - from) / step) + 1 }, (_, index) => {
       const year = from + index * step;
       let count = 0;
@@ -267,24 +267,23 @@
     const output = node("output", { "aria-live": "polite" });
     const next = node("button", { type: "button" }, "\u203A");
     detail.append(previous, output, next);
-    const slider = node("input", { type: "range", step: "1", "aria-label": "\u9009\u62E9\u5E74\u4EFD" });
-    root.append(nav, plot, detail, slider);
+    const expand = node("button", { type: "button", class: "bgmcy-open-decade" });
+    root.append(nav, plot, detail, expand);
     let decade = null;
     let rows = histogramRows(data.rows, mode);
-    let selected = rows.reduce((a, b) => b.count > a.count ? b : a).year;
-    let geometry;
+    let selected = rows.findLast((row) => row.count > 0)?.year ?? rows[0].year;
+    let hovered = null;
     let disposed = false;
     function updateSelection() {
       const grouped = mode === "decade" && decade === null;
-      const row = rows.find((row2) => row2.year === selected) || rows[0];
-      selected = row.year;
-      output.textContent = `${row.year}${grouped ? "\u5E74\u4EE3" : "\u5E74"} \xB7 ${row.count} \u90E8 \xB7 ${Number((row.count / data.total * 100).toFixed(1))}%`;
-      previous.disabled = row.year === rows[0].year;
-      next.disabled = row.year === rows.at(-1).year;
+      const row = rows.find((row2) => row2.year === (hovered ?? selected)) || rows[0];
+      output.textContent = `${grouped ? `${row.year}\u2014${row.year + 9} \u5E74` : `${row.year} \u5E74`} \xB7 ${row.count} \u90E8 \xB7 ${(row.count / data.total * 100).toFixed(1)}%`;
+      previous.disabled = selected === rows[0].year;
+      next.disabled = selected === rows.at(-1).year;
       previous.setAttribute("aria-label", grouped ? "\u524D\u4E00\u4E2A\u5E74\u4EE3" : "\u524D\u4E00\u5E74");
       next.setAttribute("aria-label", grouped ? "\u540E\u4E00\u4E2A\u5E74\u4EE3" : "\u540E\u4E00\u5E74");
-      slider.value = selected;
-      svg.querySelectorAll(".bgmcy-column").forEach((bar) => bar.classList.toggle("is-selected", Number(bar.dataset.year) === selected));
+      expand.textContent = `\u67E5\u770B ${selected}\u2014${selected + 9} \u5404\u5E74`;
+      svg.querySelectorAll(".bgmcy-column").forEach((bar) => bar.classList.toggle("is-selected", Number(bar.dataset.year) === row.year));
     }
     function draw() {
       if (disposed) return;
@@ -295,21 +294,14 @@
       const plotWidth = Math.max(1, width - left - right), plotHeight = height - top - bottom;
       const step = plotWidth / rows.length;
       const max = Math.max(1, ...rows.map((row) => row.count));
-      geometry = { left, step, plotWidth };
       period.textContent = `${rows[0].year}\u2014${rows.at(-1).year + (grouped ? 9 : 0)}`;
       back.hidden = !grouped && mode === "decade" ? false : true;
-      detail.hidden = grouped;
-      previous.hidden = mode === "decade";
-      next.hidden = mode === "decade";
-      slider.hidden = mode === "decade";
-      targets.hidden = mode !== "decade";
+      expand.hidden = !grouped;
       targets.replaceChildren();
       targets.style.gridTemplateColumns = `repeat(${rows.length}, minmax(0, 1fr))`;
-      slider.min = rows[0].year;
-      slider.max = rows.at(-1).year;
       svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
       svg.setAttribute("aria-label", `${period.textContent} ${grouped ? "\u5E74\u4EE3" : "\u5E74\u4EFD"}\u5206\u5E03`);
-      svg.replaceChildren(svgNode("title", {}, `${period.textContent}\u4F5C\u54C1\u5206\u5E03`));
+      svg.replaceChildren();
       svg.append(svgNode("text", { x: left, y: 13 }, "\u4F5C\u54C1\u6570\uFF08\u90E8\uFF09"));
       for (const value of /* @__PURE__ */ new Set([0, Math.ceil(max / 2), max])) {
         const y = top + plotHeight - value / max * plotHeight;
@@ -322,21 +314,24 @@
       rows.forEach((row, index) => {
         const gap = Math.min(4, step * 0.3), x = left + index * step + gap / 2;
         const h = row.count / max * plotHeight;
-        if (mode === "decade") {
-          const description = `${row.year}${grouped ? "\u5E74\u4EE3" : "\u5E74"}\uFF0C${row.count}\u90E8\uFF0C\u5360${Number((row.count / data.total * 100).toFixed(1))}%${grouped ? "\uFF0C\u67E5\u770B\u5404\u5E74" : ""}`;
-          const button = node("button", { type: "button", "aria-label": description, title: description, "data-year": row.year });
+        {
+          const description = `${row.year}${grouped ? "\u5E74\u4EE3" : "\u5E74"}\uFF0C${row.count}\u90E8\uFF0C\u5360${Number((row.count / data.total * 100).toFixed(1))}%`;
+          const button = node("button", { type: "button", "aria-label": description, "data-year": row.year });
           button.addEventListener("focus", () => {
+            hovered = null;
             selected = row.year;
             updateSelection();
           });
-          button.addEventListener("pointerenter", () => {
-            selected = row.year;
-            updateSelection();
+          button.addEventListener("pointerenter", (event) => {
+            if (event.pointerType === "mouse") {
+              hovered = row.year;
+              updateSelection();
+            }
           });
           button.addEventListener("click", () => {
+            hovered = null;
             selected = row.year;
-            if (grouped) openDecade();
-            else updateSelection();
+            updateSelection();
           });
           targets.append(button);
         }
@@ -357,6 +352,7 @@
       updateSelection();
     }
     function stepSelection(delta) {
+      hovered = null;
       const index = rows.findIndex((row) => row.year === selected);
       selected = rows[Math.max(0, Math.min(rows.length - 1, index + delta))].year;
       updateSelection();
@@ -364,32 +360,27 @@
     function openDecade() {
       if (mode !== "decade" || decade !== null) return;
       decade = selected;
-      selected = histogramRows(data.rows, mode, decade).reduce((a, b) => b.count > a.count ? b : a).year;
+      hovered = null;
+      selected = histogramRows(data.rows, mode, decade).findLast((row) => row.count > 0)?.year ?? decade;
       draw();
     }
     previous.addEventListener("click", () => stepSelection(-1));
     next.addEventListener("click", () => stepSelection(1));
-    slider.addEventListener("input", () => {
-      selected = Number(slider.value);
-      updateSelection();
-    });
+    expand.addEventListener("click", openDecade);
     back.addEventListener("click", () => {
+      hovered = null;
       selected = decade;
       decade = null;
       draw();
     });
-    function locate(event) {
-      const x = event.clientX - svg.getBoundingClientRect().left - geometry.left;
-      if (x < 0 || x > geometry.plotWidth) return false;
-      selected = rows[Math.min(rows.length - 1, Math.floor(x / geometry.step))].year;
+    targets.addEventListener("pointerleave", () => {
+      hovered = null;
       updateSelection();
-      return true;
-    }
-    svg.addEventListener("pointermove", (event) => {
-      if (event.pointerType === "mouse") locate(event);
     });
-    svg.addEventListener("click", (event) => {
-      if (locate(event)) openDecade();
+    root.addEventListener("keydown", (event) => {
+      if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+      event.preventDefault();
+      stepSelection(event.key === "ArrowLeft" ? -1 : 1);
     });
     const observer = typeof ResizeObserver === "function" ? new ResizeObserver(draw) : null;
     observer?.observe(svg);
