@@ -5,7 +5,6 @@ import {
 import { createCache } from './cache.js';
 
 const COMPONENT_ID = 'bgm-collection-years';
-const ALL_LABELS = { wish: '想收藏', collect: '已完成', do: '进行中', on_hold: '搁置', dropped: '抛弃' };
 
 function element(tag, attributes = {}, children = []) {
   const node = document.createElement(tag);
@@ -95,17 +94,17 @@ export function run() {
   let storage;
   try { storage = window.localStorage; } catch { /* unavailable */ }
   const cache = createCache(storage, viewer, route.username);
-  let media = route.media || 'all';
+  let media = route.media || 'anime';
   let status = route.status || 'all';
   const root = element('section', { id: COMPONENT_ID, class: 'bgmcy-card' });
   const refresh = element('button', { type: 'button', class: 'bgmcy-refresh', text: '刷新', 'aria-label': '刷新收藏统计' });
   const heading = element('div', { class: 'bgmcy-heading' }, [element('h2', { text: '收藏作品年代' }), refresh]);
   const filters = element('div', { class: 'bgmcy-filters' });
-  const mediaSelect = select('收藏类别', [['all', '全部类别'], ...Object.entries(MEDIA).map(([key, value]) => [key, value.label])], media);
+  const mediaSelect = select('收藏类别', Object.entries(MEDIA).map(([key, value]) => [key, value.label]), media);
   const statusSelect = select('收藏状态', [], status);
   const updateStatusOptions = () => {
-    const labels = media === 'all' ? ALL_LABELS : STATUS_LABELS[media];
-    statusSelect.replaceChildren(...[['all', '全部状态'], ...STATUS_ORDER.map(key => [key, labels[key]])].map(([value, text]) => element('option', { value, text })));
+    const labels = STATUS_LABELS[media];
+    statusSelect.replaceChildren(...[['all', '概览'], ...STATUS_ORDER.map(key => [key, labels[key]])].map(([value, text]) => element('option', { value, text })));
     statusSelect.value = status;
   };
   updateStatusOptions();
@@ -186,7 +185,7 @@ export function run() {
       if (current === generation) refresh.disabled = false;
     }
   }
-  mediaSelect.addEventListener('change', () => { media = mediaSelect.value; updateStatusOptions(); load(); });
+  mediaSelect.addEventListener('change', () => { media = mediaSelect.value; status = 'all'; updateStatusOptions(); load(); });
   statusSelect.addEventListener('change', () => { status = statusSelect.value; load(); });
   refresh.addEventListener('click', () => load(true));
   // Collection-list changes are observed after Bangumi updates the actual DOM.

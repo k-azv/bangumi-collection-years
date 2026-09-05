@@ -63,3 +63,20 @@ it('收藏列表删除作品后自动刷新相关缓存', async()=>{
   await vi.waitFor(()=>expect(dom.window.document.querySelector('.bgmcy-summary')?.textContent).toContain('0'),{timeout:2000});
   expect(dom.window.fetch).toHaveBeenCalledTimes(1);
 });
+it('个人页先限定具体类别，并在类别切换后提供原生状态', async()=>{
+  dom=new JSDOM('<div id="user_home"></div><div id="columnB"></div>',{url:'https://bgm.tv/user/kazv',runScripts:'outside-only'});
+  dom.window.fetch=vi.fn(async()=>({ok:true,text:async()=>'<ul id="browserItemList"></ul>'}));
+  dom.window.eval(readFileSync('dist/gadget.js','utf8'));
+  await vi.waitFor(()=>expect(dom.window.document.querySelector('.bgmcy-summary')?.textContent).toContain('0'));
+  const category=dom.window.document.querySelector('[aria-label="收藏类别"]');
+  const state=dom.window.document.querySelector('[aria-label="收藏状态"]');
+  expect([...category.options].map(o=>o.value)).toEqual(['anime','book','music','game','real']);
+  expect(category.value).toBe('anime');
+  expect([...state.options].map(o=>o.textContent)).toEqual(['概览','想看','看过','在看','搁置','抛弃']);
+  expect(dom.window.fetch.mock.calls.every(([url])=>new URL(url).pathname.startsWith('/anime/list/'))).toBe(true);
+  state.value='do';state.dispatchEvent(new dom.window.Event('change'));
+  category.value='game';category.dispatchEvent(new dom.window.Event('change'));
+  await vi.waitFor(()=>expect(dom.window.document.querySelector('.bgmcy-summary')?.textContent).toContain('0'));
+  expect(state.value).toBe('all');
+  expect([...state.options].map(o=>o.textContent)).toEqual(['概览','想玩','玩过','在玩','搁置','抛弃']);
+});

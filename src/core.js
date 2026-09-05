@@ -191,8 +191,9 @@ export async function completeSubjectDates(items, { fetchImpl = fetch, signal } 
 }
 
 export function tasksForSelection(media, status) {
-  return (media === 'all' ? Object.keys(MEDIA) : [media]).flatMap(key =>
-    (status === 'all' ? STATUS_ORDER : [status]).map(value => ({ media: key, status: value })));
+  if (!Object.hasOwn(MEDIA, media)) throw new Error('请选择作品类别');
+  if (status !== 'all' && !STATUS_ORDER.includes(status)) throw new Error('请选择收藏状态');
+  return (status === 'all' ? STATUS_ORDER : [status]).map(value => ({ media, status: value }));
 }
 
 export function distribution(items) {

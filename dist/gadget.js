@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bangumi 收藏作品年代
 // @namespace    https://github.com/k-azv/bangumi-collection-years
-// @version      0.2.0
+// @version      0.2.1
 // @description  按作品发行年份查看动画、书籍、音乐、游戏与三次元收藏
 // @author       k-azv
 // @include      /^https?:\/\/(bgm\.tv|bangumi\.tv|chii\.in)\/user\/[^/?#]+\/?$/
@@ -155,7 +155,9 @@
     return result;
   }
   function tasksForSelection(media, status) {
-    return (media === "all" ? Object.keys(MEDIA) : [media]).flatMap((key) => (status === "all" ? STATUS_ORDER : [status]).map((value) => ({ media: key, status: value })));
+    if (!Object.hasOwn(MEDIA, media)) throw new Error("\u8BF7\u9009\u62E9\u4F5C\u54C1\u7C7B\u522B");
+    if (status !== "all" && !STATUS_ORDER.includes(status)) throw new Error("\u8BF7\u9009\u62E9\u6536\u85CF\u72B6\u6001");
+    return (status === "all" ? STATUS_ORDER : [status]).map((value) => ({ media, status: value }));
   }
   function distribution(items) {
     const unique = [...new Map(items.map((item) => [`${item.media}:${item.subjectId}`, item])).values()];
@@ -203,7 +205,6 @@
 
   // src/app.js
   var COMPONENT_ID = "bgm-collection-years";
-  var ALL_LABELS = { wish: "\u60F3\u6536\u85CF", collect: "\u5DF2\u5B8C\u6210", do: "\u8FDB\u884C\u4E2D", on_hold: "\u6401\u7F6E", dropped: "\u629B\u5F03" };
   function element(tag, attributes = {}, children = []) {
     const node = document.createElement(tag);
     for (const [key, value] of Object.entries(attributes)) {
@@ -290,17 +291,17 @@
     } catch {
     }
     const cache = createCache(storage, viewer, route.username);
-    let media = route.media || "all";
+    let media = route.media || "anime";
     let status = route.status || "all";
     const root = element("section", { id: COMPONENT_ID, class: "bgmcy-card" });
     const refresh = element("button", { type: "button", class: "bgmcy-refresh", text: "\u5237\u65B0", "aria-label": "\u5237\u65B0\u6536\u85CF\u7EDF\u8BA1" });
     const heading = element("div", { class: "bgmcy-heading" }, [element("h2", { text: "\u6536\u85CF\u4F5C\u54C1\u5E74\u4EE3" }), refresh]);
     const filters = element("div", { class: "bgmcy-filters" });
-    const mediaSelect = select("\u6536\u85CF\u7C7B\u522B", [["all", "\u5168\u90E8\u7C7B\u522B"], ...Object.entries(MEDIA).map(([key, value]) => [key, value.label])], media);
+    const mediaSelect = select("\u6536\u85CF\u7C7B\u522B", Object.entries(MEDIA).map(([key, value]) => [key, value.label]), media);
     const statusSelect = select("\u6536\u85CF\u72B6\u6001", [], status);
     const updateStatusOptions = () => {
-      const labels = media === "all" ? ALL_LABELS : STATUS_LABELS[media];
-      statusSelect.replaceChildren(...[["all", "\u5168\u90E8\u72B6\u6001"], ...STATUS_ORDER.map((key) => [key, labels[key]])].map(([value, text]) => element("option", { value, text })));
+      const labels = STATUS_LABELS[media];
+      statusSelect.replaceChildren(...[["all", "\u6982\u89C8"], ...STATUS_ORDER.map((key) => [key, labels[key]])].map(([value, text]) => element("option", { value, text })));
       statusSelect.value = status;
     };
     updateStatusOptions();
@@ -384,6 +385,7 @@
     }
     mediaSelect.addEventListener("change", () => {
       media = mediaSelect.value;
+      status = "all";
       updateStatusOptions();
       load();
     });

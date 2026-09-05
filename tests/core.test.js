@@ -131,3 +131,8 @@ it('分布按筛选后的总数计算占比，保留待定项', async()=>{
   expect(data.rows[0].percent).toBeCloseTo(200/3);
   expect(data.unknown).toHaveLength(1);
 });
+it('统计请求必须属于具体的站点类别', async()=>{
+  const {tasksForSelection}=await import('../src/core.js');
+  expect(()=>tasksForSelection('all','collect')).toThrow('请选择作品类别');
+  expect(tasksForSelection('book','collect')).toEqual([{media:'book',status:'collect'}]);
+});
