@@ -70,3 +70,21 @@ html[data-theme="dark"] #bgm-collection-years .bgmcy-histogram button { color:#7
 #bgm-collection-years .bgmcy-plot { position:relative; }
 #bgm-collection-years .bgmcy-plot-targets { position:absolute; top:25px; bottom:38px; left:32px; right:8px; display:grid; }
 #bgm-collection-years .bgmcy-plot-targets button { display:block; min-width:0; padding:0; border:0; background:transparent; border-radius:0; }
+
+#bgm-collection-years .bgmcy-heading select { color:#009bc6; padding:4px 6px; font-size:12px; }
+#bgm-collection-years .bgmcy-filters { display:block; padding:4px; margin:3px 0 10px; background:#f7f7f7; border:2px solid #fff; border-radius:24px; box-shadow:0 2px 7px #00000014; }
+#bgm-collection-years .bgmcy-tabs { position:relative; display:flex; align-items:center; isolation:isolate; }
+#bgm-collection-years .bgmcy-tabs button { position:relative; flex:1; min-width:0; border:0; background:transparent; color:#009bc6; font:inherit; font-size:13px; padding:9px 2px; white-space:nowrap; border-radius:22px; cursor:pointer; transition:color .15s; }
+#bgm-collection-years .bgmcy-categories button[aria-pressed="true"] { color:white; }
+#bgm-collection-years .bgmcy-indicator { position:absolute; left:0; top:0; bottom:0; border-radius:24px; background:var(--bgmcy-pink); box-shadow:0 2px 5px #ed8d9960; z-index:-1; pointer-events:none; transition:transform .36s cubic-bezier(.25,1.3,.45,1),width .36s cubic-bezier(.25,1.3,.45,1); }
+#bgm-collection-years .bgmcy-states { margin:4px 5px 0; padding-top:3px; border-top:1px solid var(--bgmcy-line); }
+#bgm-collection-years .bgmcy-states button { font-size:12px; padding:9px 1px 12px; color:#777; }
+#bgm-collection-years .bgmcy-states button[aria-pressed="true"], #bgm-collection-years .bgmcy-states button:hover { color:#333; font-weight:500; }
+#bgm-collection-years .bgmcy-states .bgmcy-indicator { top:auto; bottom:3px; height:3px; background:transparent; box-shadow:none; }
+#bgm-collection-years .bgmcy-states .bgmcy-indicator::before { content:""; display:block; width:18px; height:3px; margin:auto; background:var(--bgmcy-pink); border-radius:3px; }
+#bgm-collection-years > .bgmcy-refresh { display:block; margin:6px 0 0 auto; font-size:12px; }
+html[data-theme="dark"] #bgm-collection-years .bgmcy-filters { background:#292929; border-color:#333; }
+html[data-theme="dark"] #bgm-collection-years .bgmcy-states button { color:#aaa; }
+html[data-theme="dark"] #bgm-collection-years .bgmcy-states button[aria-pressed="true"] { color:#eee; }
+@media (prefers-reduced-motion:reduce) { #bgm-collection-years .bgmcy-indicator, #bgm-collection-years .bgmcy-tabs button { transition:none; } }
+@media (pointer:coarse) { #bgm-collection-years .bgmcy-tabs button { min-height:44px; } }

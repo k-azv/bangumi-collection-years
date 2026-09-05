@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bangumi 收藏作品年代
 // @namespace    https://github.com/k-azv/bangumi-collection-years
-// @version      0.3.1
+// @version      0.3.2
 // @description  按作品发行年份查看动画、书籍、音乐、游戏与三次元收藏
 // @author       k-azv
 // @include      /^https?:\/\/(bgm\.tv|bangumi\.tv|chii\.in)\/user\/[^/?#]+\/?$/
@@ -495,9 +495,9 @@
     let status = route.status || "all";
     const root = element("div", { id: COMPONENT_ID, class: "SidePanel png_bg bgmcy-card" });
     const refresh = element("button", { type: "button", class: "bgmcy-refresh", text: "\u5237\u65B0", "aria-label": "\u5237\u65B0\u6536\u85CF\u7EDF\u8BA1" });
-    const heading = element("div", { class: "bgmcy-heading" }, [element("h2", { text: "/ \u6536\u85CF\u4F5C\u54C1\u5E74\u4EE3" }), refresh]);
+    const heading = element("div", { class: "bgmcy-heading" }, [element("h2", { text: "\u6536\u85CF\u4F5C\u54C1\u5E74\u4EE3" })]);
     const filters = element("div", { class: "bgmcy-filters" });
-    const mediaSelect = select("\u6536\u85CF\u7C7B\u522B", Object.entries(MEDIA).map(([key, value]) => [key, value.label]), media);
+    const mediaSelect = select("\u6536\u85CF\u7C7B\u522B", ["book", "anime", "music", "game", "real"].map((key) => [key, MEDIA[key].label]), media);
     const statusSelect = select("\u6536\u85CF\u72B6\u6001", [], status);
     const updateStatusOptions = () => {
       const labels = STATUS_LABELS[media];
@@ -505,15 +505,59 @@
       statusSelect.value = status;
     };
     updateStatusOptions();
-    if (route.kind === "profile") filters.append(mediaSelect);
-    else filters.append(element("span", { class: "bgmcy-media", text: MEDIA[media].label }));
-    filters.append(statusSelect);
+    mediaSelect.hidden = true;
+    statusSelect.hidden = true;
+    const categoryTabs = element("div", { class: "bgmcy-tabs bgmcy-categories", role: "group", "aria-label": "\u7C7B\u522B" });
+    const statusTabs = element("div", { class: "bgmcy-tabs bgmcy-states", role: "group", "aria-label": "\u72B6\u6001" });
+    function positionIndicator(tabs) {
+      const active = tabs.querySelector('[aria-pressed="true"]');
+      const marker = tabs.querySelector(".bgmcy-indicator");
+      if (!active || !marker) return;
+      marker.style.width = `${active.offsetWidth}px`;
+      marker.style.transform = `translateX(${active.offsetLeft}px)`;
+    }
+    function paintTabs(tabs, selector) {
+      let marker = tabs.querySelector(".bgmcy-indicator");
+      if (!marker) {
+        marker = element("span", { class: "bgmcy-indicator", "aria-hidden": "true" });
+        tabs.append(marker);
+      }
+      const buttons = [...tabs.querySelectorAll("button")];
+      if (buttons.length === selector.options.length && buttons.every((button, index) => button.textContent === selector.options[index].textContent)) {
+        buttons.forEach((button, index) => button.setAttribute("aria-pressed", String(selector.options[index].value === selector.value)));
+        positionIndicator(tabs);
+        return;
+      }
+      buttons.forEach((button) => button.remove());
+      for (const option of selector.options) {
+        const button = element("button", { type: "button", text: option.textContent, "aria-pressed": String(option.value === selector.value) });
+        button.addEventListener("click", () => {
+          if (selector.value === option.value) return;
+          selector.value = option.value;
+          selector.dispatchEvent(new Event("change"));
+        });
+        tabs.append(button);
+      }
+      positionIndicator(tabs);
+    }
+    function updateTabs() {
+      paintTabs(categoryTabs, mediaSelect);
+      paintTabs(statusTabs, statusSelect);
+    }
+    filters.append(mediaSelect, statusSelect, categoryTabs, statusTabs);
+    updateTabs();
     const modeSelect = select("\u56FE\u8868\u7C7B\u578B", CHART_MODES, mode);
-    const displayOptions = element("div", { class: "bgmcy-display-options" }, [modeSelect]);
+    heading.append(modeSelect);
     const body = element("div", { class: "bgmcy-body" });
     const message = element("p", { class: "bgmcy-status", "aria-live": "polite", hidden: true });
-    root.append(heading, filters, displayOptions, body, message);
+    root.append(heading, filters, body, refresh, message);
     if (!mountRoot(root, route)) return;
+    const alignTabs = () => {
+      positionIndicator(categoryTabs);
+      positionIndicator(statusTabs);
+    };
+    if (typeof ResizeObserver !== "undefined") new ResizeObserver(alignTabs).observe(filters);
+    alignTabs();
     function checkCurrentPage() {
       const affected = /* @__PURE__ */ new Set();
       for (const link of document.querySelectorAll('a[href*="/list/"]')) {
@@ -606,10 +650,12 @@
       media = mediaSelect.value;
       status = "all";
       updateStatusOptions();
+      updateTabs();
       load();
     });
     statusSelect.addEventListener("change", () => {
       status = statusSelect.value;
+      updateTabs();
       load();
     });
     refresh.addEventListener("click", () => load(true));

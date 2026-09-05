@@ -73,12 +73,13 @@ it('个人页先限定具体类别，并在类别切换后提供原生状态', a
   await vi.waitFor(()=>expect(dom.window.document.querySelector('.bgmcy-summary')?.textContent).toContain('0'));
   const category=dom.window.document.querySelector('[aria-label="收藏类别"]');
   const state=dom.window.document.querySelector('[aria-label="收藏状态"]');
-  expect([...category.options].map(o=>o.value)).toEqual(['anime','book','music','game','real']);
+  expect([...category.options].map(o=>o.value)).toEqual(['book','anime','music','game','real']);
   expect(category.value).toBe('anime');
   expect([...state.options].map(o=>o.textContent)).toEqual(['概览','想看','看过','在看','搁置','抛弃']);
   expect(dom.window.fetch.mock.calls.every(([url])=>new URL(url).pathname.startsWith('/anime/list/'))).toBe(true);
-  state.value='do';state.dispatchEvent(new dom.window.Event('change'));
-  category.value='game';category.dispatchEvent(new dom.window.Event('change'));
+  [...dom.window.document.querySelectorAll('.bgmcy-states button')].find(b=>b.textContent==='在看').click();
+  expect(state.value).toBe('do');
+  [...dom.window.document.querySelectorAll('.bgmcy-categories button')].find(b=>b.textContent==='游戏').click();
   await vi.waitFor(()=>expect(dom.window.document.querySelector('.bgmcy-summary')?.textContent).toContain('0'));
   expect(state.value).toBe('all');
   expect([...state.options].map(o=>o.textContent)).toEqual(['概览','想玩','玩过','在玩','搁置','抛弃']);

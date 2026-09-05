@@ -102,9 +102,9 @@ export function run() {
   let status = route.status || 'all';
   const root = element('div', { id: COMPONENT_ID, class: 'SidePanel png_bg bgmcy-card' });
   const refresh = element('button', { type: 'button', class: 'bgmcy-refresh', text: '刷新', 'aria-label': '刷新收藏统计' });
-  const heading = element('div', { class: 'bgmcy-heading' }, [element('h2', { text: '/ 收藏作品年代' }), refresh]);
+  const heading = element('div', { class: 'bgmcy-heading' }, [element('h2', { text: '收藏作品年代' })]);
   const filters = element('div', { class: 'bgmcy-filters' });
-  const mediaSelect = select('收藏类别', Object.entries(MEDIA).map(([key, value]) => [key, value.label]), media);
+  const mediaSelect = select('收藏类别', ['book', 'anime', 'music', 'game', 'real'].map(key => [key, MEDIA[key].label]), media);
   const statusSelect = select('收藏状态', [], status);
   const updateStatusOptions = () => {
     const labels = STATUS_LABELS[media];
@@ -112,15 +112,51 @@ export function run() {
     statusSelect.value = status;
   };
   updateStatusOptions();
-  if (route.kind === 'profile') filters.append(mediaSelect);
-  else filters.append(element('span', { class: 'bgmcy-media', text: MEDIA[media].label }));
-  filters.append(statusSelect);
+  // Selects hold the values; visible buttons provide the category/status interaction.
+  mediaSelect.hidden = true;
+  statusSelect.hidden = true;
+  const categoryTabs = element('div', { class: 'bgmcy-tabs bgmcy-categories', role: 'group', 'aria-label': '类别' });
+  const statusTabs = element('div', { class: 'bgmcy-tabs bgmcy-states', role: 'group', 'aria-label': '状态' });
+  function positionIndicator(tabs) {
+    const active = tabs.querySelector('[aria-pressed="true"]');
+    const marker = tabs.querySelector('.bgmcy-indicator');
+    if (!active || !marker) return;
+    marker.style.width = `${active.offsetWidth}px`;
+    marker.style.transform = `translateX(${active.offsetLeft}px)`;
+  }
+  function paintTabs(tabs, selector) {
+    let marker = tabs.querySelector('.bgmcy-indicator');
+    if (!marker) { marker = element('span', { class: 'bgmcy-indicator', 'aria-hidden': 'true' }); tabs.append(marker); }
+    const buttons = [...tabs.querySelectorAll('button')];
+    if (buttons.length === selector.options.length && buttons.every((button, index) => button.textContent === selector.options[index].textContent)) {
+      buttons.forEach((button, index) => button.setAttribute('aria-pressed', String(selector.options[index].value === selector.value)));
+      positionIndicator(tabs);
+      return;
+    }
+    buttons.forEach(button => button.remove());
+    for (const option of selector.options) {
+      const button = element('button', { type: 'button', text: option.textContent, 'aria-pressed': String(option.value === selector.value) });
+      button.addEventListener('click', () => {
+        if (selector.value === option.value) return;
+        selector.value = option.value;
+        selector.dispatchEvent(new Event('change'));
+      });
+      tabs.append(button);
+    }
+    positionIndicator(tabs);
+  }
+  function updateTabs() { paintTabs(categoryTabs, mediaSelect); paintTabs(statusTabs, statusSelect); }
+  filters.append(mediaSelect, statusSelect, categoryTabs, statusTabs);
+  updateTabs();
   const modeSelect = select('图表类型', CHART_MODES, mode);
-  const displayOptions = element('div', { class: 'bgmcy-display-options' }, [modeSelect]);
+  heading.append(modeSelect);
   const body = element('div', { class: 'bgmcy-body' });
   const message = element('p', { class: 'bgmcy-status', 'aria-live': 'polite', hidden: true });
-  root.append(heading, filters, displayOptions, body, message);
+  root.append(heading, filters, body, refresh, message);
   if (!mountRoot(root, route)) return;
+  const alignTabs = () => { positionIndicator(categoryTabs); positionIndicator(statusTabs); };
+  if (typeof ResizeObserver !== 'undefined') new ResizeObserver(alignTabs).observe(filters);
+  alignTabs();
 
   function checkCurrentPage() {
     const affected = new Set();
@@ -203,8 +239,8 @@ export function run() {
       if (current === generation) refresh.disabled = false;
     }
   }
-  mediaSelect.addEventListener('change', () => { media = mediaSelect.value; status = 'all'; updateStatusOptions(); load(); });
-  statusSelect.addEventListener('change', () => { status = statusSelect.value; load(); });
+  mediaSelect.addEventListener('change', () => { media = mediaSelect.value; status = 'all'; updateStatusOptions(); updateTabs(); load(); });
+  statusSelect.addEventListener('change', () => { status = statusSelect.value; updateTabs(); load(); });
   refresh.addEventListener('click', () => load(true));
   // Collection-list changes are observed after Bangumi updates the actual DOM.
   const list = document.querySelector('#browserItemList');
