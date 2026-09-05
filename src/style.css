@@ -4,27 +4,22 @@
   --bgmcy-pink: #f09199;
   box-sizing: border-box;
   margin: 0 0 20px;
-  color: #666;
-  font: 12px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
-  border: 1px solid var(--bgmcy-line);
-  border-radius: 5px;
-  background: #fff;
+  font: inherit;
   min-width: 0;
   width: 100%;
 }
 #bgm-collection-years *, #bgm-collection-years *::before { box-sizing: border-box; }
 #bgm-collection-years .bgmcy-heading {
   display: flex; align-items: center; justify-content: space-between;
-  gap: 8px; padding: 9px 12px; border-bottom: 1px solid var(--bgmcy-line);
-  background: linear-gradient(#fff, #fafafa); border-radius: 5px 5px 0 0;
+  gap: 8px; padding: 0;
 }
-#bgm-collection-years h2 { margin: 0; color: #666; font-size: 14px; font-weight: 700; }
+#bgm-collection-years h2 { margin: 0; font-size: 13px; font-weight: normal; line-height: 40px; }
 #bgm-collection-years .bgmcy-refresh { border: 0; padding: 2px; background: transparent; color: #0084b4; cursor: pointer; font: inherit; flex-shrink: 0; }
 #bgm-collection-years .bgmcy-refresh:disabled { color: #aaa; cursor: wait; }
-#bgm-collection-years .bgmcy-filters { display: flex; align-items: center; gap: 8px; padding: 12px 12px 0; }
-#bgm-collection-years select { font: inherit; color: inherit; border: 1px solid #ddd; background: #fff; border-radius: 4px; padding: 3px 5px; min-width: 0; max-width: 100%; }
+#bgm-collection-years .bgmcy-filters { display: flex; align-items: center; gap: 8px; padding: 10px 2px 0; }
+#bgm-collection-years select { font: inherit; color: inherit; border: 1px solid #ddd; background: transparent; border-radius: 14px; padding: 4px 10px; min-width: 0; max-width: 100%; }
 #bgm-collection-years .bgmcy-media { margin-right: auto; }
-#bgm-collection-years .bgmcy-body { padding: 10px 12px 12px; }
+#bgm-collection-years .bgmcy-body { padding: 10px 2px 2px; }
 #bgm-collection-years .bgmcy-body:empty { padding: 0; }
 #bgm-collection-years .bgmcy-summary { margin: 0 0 10px; }
 #bgm-collection-years .bgmcy-summary strong { color: var(--bgmcy-pink); font-size: 22px; font-weight: 600; margin-right: 3px; }
@@ -46,28 +41,32 @@
   #bgm-collection-years { margin-bottom: 14px; }
   #bgm-collection-years select, #bgm-collection-years .bgmcy-refresh { min-height: 32px; }
 }
-html[data-theme="dark"] #bgm-collection-years { background: #222; color: #ccc; --bgmcy-line: #444; }
-html[data-theme="dark"] #bgm-collection-years .bgmcy-heading { background: #292929; }
+html[data-theme="dark"] #bgm-collection-years { --bgmcy-line: #444; }
+
 html[data-theme="dark"] #bgm-collection-years h2 { color: #ccc; }
 html[data-theme="dark"] #bgm-collection-years select { background: #222; border-color: #555; }
 html[data-theme="dark"] #bgm-collection-years .bgmcy-bar { background: #333; }
-#bgm-collection-years .bgmcy-display-options { padding: 8px 12px 0; }
+#bgm-collection-years .bgmcy-display-options { padding: 6px 2px 0; }
 #bgm-collection-years .bgmcy-chart-nav { display:flex; align-items:center; justify-content:space-between; gap:6px; min-height:30px; }
 #bgm-collection-years .bgmcy-histogram button { font:inherit; color:#0084b4; background:transparent; border:0; padding:3px 0; cursor:pointer; }
 #bgm-collection-years .bgmcy-histogram button:disabled { opacity:.4; cursor:default; }
 #bgm-collection-years .bgmcy-svg { display:block; width:100%; height:196px; touch-action:pan-y; }
-#bgm-collection-years .bgmcy-svg text { font:11px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; fill:currentColor; }
+#bgm-collection-years .bgmcy-svg text { font-family:inherit; font-size:11px; fill:currentColor; }
 #bgm-collection-years .bgmcy-grid { stroke:var(--bgmcy-line); stroke-width:1; }
-#bgm-collection-years .bgmcy-column { fill:var(--bgmcy-pink); }
-#bgm-collection-years .bgmcy-column.is-selected { fill:#bb5363; }
+#bgm-collection-years .bgmcy-column { fill:var(--bgmcy-pink); opacity:.65; }
+#bgm-collection-years .bgmcy-column.is-selected { fill:var(--bgmcy-pink); opacity:1; }
 #bgm-collection-years .bgmcy-chart-hit { fill:transparent; cursor:pointer; }
 #bgm-collection-years .bgmcy-chart-detail { display:flex; align-items:center; gap:4px; border-top:1px solid var(--bgmcy-line); min-height:42px; font-variant-numeric:tabular-nums; }
 #bgm-collection-years .bgmcy-chart-detail output { flex:1; text-align:center; white-space:nowrap; }
 #bgm-collection-years .bgmcy-chart-detail button { min-width:32px; min-height:40px; font-size:18px; }
-#bgm-collection-years .bgmcy-histogram input[type="range"] { display:block; width:100%; margin:4px 0 0; accent-color:#bb5363; min-height:28px; }
+#bgm-collection-years .bgmcy-histogram input[type="range"] { display:block; width:100%; margin:4px 0 0; accent-color:var(--bgmcy-pink); min-height:28px; }
 #bgm-collection-years .bgmcy-open-decade { min-height:30px; }
 @media (pointer:coarse) {
   #bgm-collection-years .bgmcy-chart-detail button, #bgm-collection-years .bgmcy-open-decade { min-height:44px; min-width:44px; }
 }
-html[data-theme="dark"] #bgm-collection-years .bgmcy-column.is-selected { fill:#ffb0b9; }
+
 html[data-theme="dark"] #bgm-collection-years .bgmcy-histogram button { color:#7cc5e0; }
+
+#bgm-collection-years .bgmcy-plot { position:relative; }
+#bgm-collection-years .bgmcy-plot-targets { position:absolute; top:25px; bottom:38px; left:32px; right:8px; display:grid; }
+#bgm-collection-years .bgmcy-plot-targets button { display:block; min-width:0; padding:0; border:0; background:transparent; border-radius:0; }

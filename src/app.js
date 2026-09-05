@@ -100,9 +100,9 @@ export function run() {
   let mode = readChartMode(storage);
   let media = route.media || 'anime';
   let status = route.status || 'all';
-  const root = element('section', { id: COMPONENT_ID, class: 'bgmcy-card' });
+  const root = element('div', { id: COMPONENT_ID, class: 'SidePanel png_bg bgmcy-card' });
   const refresh = element('button', { type: 'button', class: 'bgmcy-refresh', text: '刷新', 'aria-label': '刷新收藏统计' });
-  const heading = element('div', { class: 'bgmcy-heading' }, [element('h2', { text: '收藏作品年代' }), refresh]);
+  const heading = element('div', { class: 'bgmcy-heading' }, [element('h2', { text: '/ 收藏作品年代' }), refresh]);
   const filters = element('div', { class: 'bgmcy-filters' });
   const mediaSelect = select('收藏类别', Object.entries(MEDIA).map(([key, value]) => [key, value.label]), media);
   const statusSelect = select('收藏状态', [], status);

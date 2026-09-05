@@ -49,14 +49,16 @@ export function createHistogram(data, mode) {
   const back = node('button', { type: 'button' }, '返回全部年代');
   nav.append(period, back);
   const svg = svgNode('svg', { class: 'bgmcy-svg', role: 'img' });
+  const plot = node('div', { class: 'bgmcy-plot' });
+  const targets = node('div', { class: 'bgmcy-plot-targets' });
+  plot.append(svg, targets);
   const detail = node('div', { class: 'bgmcy-chart-detail' });
   const previous = node('button', { type: 'button' }, '‹');
   const output = node('output', { 'aria-live': 'polite' });
   const next = node('button', { type: 'button' }, '›');
   detail.append(previous, output, next);
-  const open = node('button', { type: 'button', class: 'bgmcy-open-decade' }, '查看各年');
   const slider = node('input', { type: 'range', step: '1', 'aria-label': '选择年份' });
-  root.append(nav, svg, detail, open, slider);
+  root.append(nav, plot, detail, slider);
   let decade = null;
   let rows = histogramRows(data.rows, mode);
   let selected = rows.reduce((a, b) => b.count > a.count ? b : a).year;
@@ -87,8 +89,13 @@ export function createHistogram(data, mode) {
     geometry = { left, step, plotWidth };
     period.textContent = `${rows[0].year}—${rows.at(-1).year + (grouped ? 9 : 0)}`;
     back.hidden = !grouped && mode === 'decade' ? false : true;
-    open.hidden = !grouped;
-    slider.hidden = grouped;
+    detail.hidden = grouped;
+    previous.hidden = mode === 'decade';
+    next.hidden = mode === 'decade';
+    slider.hidden = mode === 'decade';
+    targets.hidden = mode !== 'decade';
+    targets.replaceChildren();
+    targets.style.gridTemplateColumns = `repeat(${rows.length}, minmax(0, 1fr))`;
     slider.min = rows[0].year;
     slider.max = rows.at(-1).year;
     svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
@@ -104,6 +111,14 @@ export function createHistogram(data, mode) {
     rows.forEach((row, index) => {
       const gap = Math.min(4, step * .3), x = left + index * step + gap / 2;
       const h = row.count / max * plotHeight;
+      if (mode === 'decade') {
+        const description = `${row.year}${grouped ? '年代' : '年'}，${row.count}部，占${Number((row.count / data.total * 100).toFixed(1))}%${grouped ? '，查看各年' : ''}`;
+        const button = node('button', { type: 'button', 'aria-label': description, title: description, 'data-year': row.year });
+        button.addEventListener('focus', () => { selected = row.year; updateSelection(); });
+        button.addEventListener('pointerenter', () => { selected = row.year; updateSelection(); });
+        button.addEventListener('click', () => { selected = row.year; if (grouped) openDecade(); else updateSelection(); });
+        targets.append(button);
+      }
       svg.append(svgNode('rect', { x, y: top + plotHeight - h, width: Math.max(.1, step - gap), height: h,
         class: 'bgmcy-column', 'data-year': row.year, 'data-count': row.count }));
       if (grouped && step >= 30) svg.append(svgNode('text', { x: x + (step - gap) / 2, y: top + plotHeight - h - 6, 'text-anchor': 'middle', class: 'bgmcy-column-value' }, row.count));
@@ -127,7 +142,6 @@ export function createHistogram(data, mode) {
   previous.addEventListener('click', () => stepSelection(-1));
   next.addEventListener('click', () => stepSelection(1));
   slider.addEventListener('input', () => { selected = Number(slider.value); updateSelection(); });
-  open.addEventListener('click', openDecade);
   back.addEventListener('click', () => { selected = decade; decade = null; draw(); });
   function locate(event) {
     const x = event.clientX - svg.getBoundingClientRect().left - geometry.left;

@@ -92,7 +92,10 @@ it('三种图表共用数据，年代展开与返回正确，切换保存偏好�
  const doc=dom.window.document,mode=doc.querySelector('[aria-label="图表类型"]');
  const sum=()=>[...doc.querySelectorAll('.bgmcy-column')].reduce((n,e)=>n+Number(e.dataset.count),0);
  expect(mode.value).toBe('decade');expect(sum()).toBe(5);
- doc.querySelector('.bgmcy-open-decade').click();
+ expect(doc.querySelector('.bgmcy-chart-detail').hidden).toBe(true);
+ expect(doc.querySelector('.bgmcy-histogram input').hidden).toBe(true);
+ doc.querySelector('.bgmcy-plot-targets button[data-year="2000"]').click();
+ expect(doc.querySelector('.bgmcy-histogram input').hidden).toBe(true);
  expect(doc.querySelectorAll('.bgmcy-column')).toHaveLength(10);expect(sum()).toBe(3);
  expect(doc.querySelector('.bgmcy-chart-detail output').textContent).toBe('2009年 · 2 部 · 40%');
  doc.querySelector('.bgmcy-chart-nav button').click();expect(sum()).toBe(5);

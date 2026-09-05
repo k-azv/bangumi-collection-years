@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bangumi 收藏作品年代
 // @namespace    https://github.com/k-azv/bangumi-collection-years
-// @version      0.3.0
+// @version      0.3.1
 // @description  按作品发行年份查看动画、书籍、音乐、游戏与三次元收藏
 // @author       k-azv
 // @include      /^https?:\/\/(bgm\.tv|bangumi\.tv|chii\.in)\/user\/[^/?#]+\/?$/
@@ -259,14 +259,16 @@
     const back = node("button", { type: "button" }, "\u8FD4\u56DE\u5168\u90E8\u5E74\u4EE3");
     nav.append(period, back);
     const svg = svgNode("svg", { class: "bgmcy-svg", role: "img" });
+    const plot = node("div", { class: "bgmcy-plot" });
+    const targets = node("div", { class: "bgmcy-plot-targets" });
+    plot.append(svg, targets);
     const detail = node("div", { class: "bgmcy-chart-detail" });
     const previous = node("button", { type: "button" }, "\u2039");
     const output = node("output", { "aria-live": "polite" });
     const next = node("button", { type: "button" }, "\u203A");
     detail.append(previous, output, next);
-    const open = node("button", { type: "button", class: "bgmcy-open-decade" }, "\u67E5\u770B\u5404\u5E74");
     const slider = node("input", { type: "range", step: "1", "aria-label": "\u9009\u62E9\u5E74\u4EFD" });
-    root.append(nav, svg, detail, open, slider);
+    root.append(nav, plot, detail, slider);
     let decade = null;
     let rows = histogramRows(data.rows, mode);
     let selected = rows.reduce((a, b) => b.count > a.count ? b : a).year;
@@ -296,8 +298,13 @@
       geometry = { left, step, plotWidth };
       period.textContent = `${rows[0].year}\u2014${rows.at(-1).year + (grouped ? 9 : 0)}`;
       back.hidden = !grouped && mode === "decade" ? false : true;
-      open.hidden = !grouped;
-      slider.hidden = grouped;
+      detail.hidden = grouped;
+      previous.hidden = mode === "decade";
+      next.hidden = mode === "decade";
+      slider.hidden = mode === "decade";
+      targets.hidden = mode !== "decade";
+      targets.replaceChildren();
+      targets.style.gridTemplateColumns = `repeat(${rows.length}, minmax(0, 1fr))`;
       slider.min = rows[0].year;
       slider.max = rows.at(-1).year;
       svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
@@ -315,6 +322,24 @@
       rows.forEach((row, index) => {
         const gap = Math.min(4, step * 0.3), x = left + index * step + gap / 2;
         const h = row.count / max * plotHeight;
+        if (mode === "decade") {
+          const description = `${row.year}${grouped ? "\u5E74\u4EE3" : "\u5E74"}\uFF0C${row.count}\u90E8\uFF0C\u5360${Number((row.count / data.total * 100).toFixed(1))}%${grouped ? "\uFF0C\u67E5\u770B\u5404\u5E74" : ""}`;
+          const button = node("button", { type: "button", "aria-label": description, title: description, "data-year": row.year });
+          button.addEventListener("focus", () => {
+            selected = row.year;
+            updateSelection();
+          });
+          button.addEventListener("pointerenter", () => {
+            selected = row.year;
+            updateSelection();
+          });
+          button.addEventListener("click", () => {
+            selected = row.year;
+            if (grouped) openDecade();
+            else updateSelection();
+          });
+          targets.append(button);
+        }
         svg.append(svgNode("rect", {
           x,
           y: top + plotHeight - h,
@@ -348,7 +373,6 @@
       selected = Number(slider.value);
       updateSelection();
     });
-    open.addEventListener("click", openDecade);
     back.addEventListener("click", () => {
       selected = decade;
       decade = null;
@@ -469,9 +493,9 @@
     let mode = readChartMode(storage);
     let media = route.media || "anime";
     let status = route.status || "all";
-    const root = element("section", { id: COMPONENT_ID, class: "bgmcy-card" });
+    const root = element("div", { id: COMPONENT_ID, class: "SidePanel png_bg bgmcy-card" });
     const refresh = element("button", { type: "button", class: "bgmcy-refresh", text: "\u5237\u65B0", "aria-label": "\u5237\u65B0\u6536\u85CF\u7EDF\u8BA1" });
-    const heading = element("div", { class: "bgmcy-heading" }, [element("h2", { text: "\u6536\u85CF\u4F5C\u54C1\u5E74\u4EE3" }), refresh]);
+    const heading = element("div", { class: "bgmcy-heading" }, [element("h2", { text: "/ \u6536\u85CF\u4F5C\u54C1\u5E74\u4EE3" }), refresh]);
     const filters = element("div", { class: "bgmcy-filters" });
     const mediaSelect = select("\u6536\u85CF\u7C7B\u522B", Object.entries(MEDIA).map(([key, value]) => [key, value.label]), media);
     const statusSelect = select("\u6536\u85CF\u72B6\u6001", [], status);
