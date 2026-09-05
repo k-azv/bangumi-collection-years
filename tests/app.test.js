@@ -11,6 +11,7 @@ it('游戏在玩页自动在侧栏展示当前状态的年份分布', async () =
   const fetcher = vi.fn(async () => ({ok:true, text:async()=>`<ul id="browserItemList">
     <li id="item_1"><h3><a href="/subject/1">Harmonia</a></h3><p class="info tip">2016年9月23日 / PC</p></li>
     <li id="item_2"><h3><a href="/subject/2">炽焰天穹</a></h3><p class="info tip">2022-02-10 / PC</p></li></ul>`}));
+  dom.window.localStorage.setItem('bgmcy:chart-mode','list');
   dom.window.fetch = fetcher;
   dom.window.eval(readFileSync('dist/gadget.js', 'utf8'));
   await vi.waitFor(() => {
@@ -26,6 +27,7 @@ it('打开页面复用缓存，切换状态只加载选中的状态', async () =
   dom=new JSDOM('<div id="dock"><li class="first"><a href="/user/kazv">kazv</a></li></div><div id="columnSubjectBrowserA"></div><div id="columnSubjectBrowserB"></div>',{url:'https://bgm.tv/game/list/kazv/do',runScripts:'outside-only'});
   dom.window.localStorage.setItem('bgmcy:v2:kazv:kazv:game:do',JSON.stringify({at:Date.now(),items:[{subjectId:'1',media:'game',status:'do',year:2016}]}));
   const fetcher=vi.fn(async()=>({ok:true,text:async()=>'<ul id="browserItemList"><li id="item_2"><p class="info tip">2022-01-01</p></li></ul>'}));
+  dom.window.localStorage.setItem('bgmcy:chart-mode','list');
   dom.window.fetch=fetcher;
   dom.window.eval(readFileSync('dist/gadget.js','utf8'));
   expect(dom.window.document.querySelector('.bgmcy-row').textContent).toContain('2016');
@@ -38,6 +40,7 @@ it('打开页面复用缓存，切换状态只加载选中的状态', async () =
 it('过期缓存先展示结果，再自动更新；刷新失败保留缓存', async () => {
   dom=new JSDOM('<div id="columnSubjectBrowserA"></div><div id="columnSubjectBrowserB"></div>',{url:'https://bgm.tv/game/list/kazv/do',runScripts:'outside-only'});
   dom.window.localStorage.setItem('bgmcy:v2:guest:kazv:game:do',JSON.stringify({at:1,items:[{subjectId:'1',media:'game',status:'do',year:2016}]}));
+  dom.window.localStorage.setItem('bgmcy:chart-mode','list');
   dom.window.fetch=vi.fn(async()=>({ok:false,status:403}));
   dom.window.eval(readFileSync('dist/gadget.js','utf8'));
   expect(dom.window.document.querySelector('.bgmcy-row').textContent).toContain('2016');
@@ -79,4 +82,26 @@ it('个人页先限定具体类别，并在类别切换后提供原生状态', a
   await vi.waitFor(()=>expect(dom.window.document.querySelector('.bgmcy-summary')?.textContent).toContain('0'));
   expect(state.value).toBe('all');
   expect([...state.options].map(o=>o.textContent)).toEqual(['概览','想玩','玩过','在玩','搁置','抛弃']);
+});
+it('三种图表共用数据，年代展开与返回正确，切换保存偏好且不重新请求',async()=>{
+ dom=new JSDOM('<div id="columnSubjectBrowserA"></div><div id="columnSubjectBrowserB"></div>',{url:'https://bgm.tv/anime/list/kazv/collect',runScripts:'outside-only'});
+ const items=[{subjectId:'1',media:'anime',status:'collect',year:1982},{subjectId:'2',media:'anime',status:'collect',year:2000},{subjectId:'3',media:'anime',status:'collect',year:2009},{subjectId:'4',media:'anime',status:'collect',year:2009},{subjectId:'5',media:'anime',status:'collect',year:2026}];
+ dom.window.localStorage.setItem('bgmcy:v2:guest:kazv:anime:collect',JSON.stringify({at:Date.now(),items}));
+ dom.window.fetch=vi.fn();
+ dom.window.eval(readFileSync('dist/gadget.js','utf8'));
+ const doc=dom.window.document,mode=doc.querySelector('[aria-label="图表类型"]');
+ const sum=()=>[...doc.querySelectorAll('.bgmcy-column')].reduce((n,e)=>n+Number(e.dataset.count),0);
+ expect(mode.value).toBe('decade');expect(sum()).toBe(5);
+ doc.querySelector('.bgmcy-open-decade').click();
+ expect(doc.querySelectorAll('.bgmcy-column')).toHaveLength(10);expect(sum()).toBe(3);
+ expect(doc.querySelector('.bgmcy-chart-detail output').textContent).toBe('2009年 · 2 部 · 40%');
+ doc.querySelector('.bgmcy-chart-nav button').click();expect(sum()).toBe(5);
+ mode.value='year';mode.dispatchEvent(new dom.window.Event('change'));
+ expect(doc.querySelectorAll('.bgmcy-column')).toHaveLength(45);expect(sum()).toBe(5);
+ const slider=doc.querySelector('input[type="range"]');slider.value='2001';slider.dispatchEvent(new dom.window.Event('input'));
+ expect(doc.querySelector('output').textContent).toBe('2001年 · 0 部 · 0%');
+ mode.value='list';mode.dispatchEvent(new dom.window.Event('change'));
+ expect([...doc.querySelectorAll('.bgmcy-count')].reduce((n,e)=>n+Number(e.textContent),0)).toBe(5);
+ expect(dom.window.localStorage.getItem('bgmcy:chart-mode')).toBe('list');
+ expect(dom.window.fetch).not.toHaveBeenCalled();
 });

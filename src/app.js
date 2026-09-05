@@ -3,6 +3,7 @@ import {
   fetchCollectionPages, getSignedInUsername, parseCollectionDocument, parseRoute, tasksForSelection,
 } from './core.js';
 import { createCache } from './cache.js';
+import { CHART_MODES, createHistogram, readChartMode, saveChartMode } from './charts.js';
 
 const COMPONENT_ID = 'bgm-collection-years';
 
@@ -51,7 +52,7 @@ function select(label, options, value) {
   return node;
 }
 
-function renderChart(body, items) {
+function renderChart(body, items, mode) {
   const data = distribution(items);
   const summary = element('p', { class: 'bgmcy-summary' }, [
     element('strong', { text: String(data.total) }), document.createTextNode(' 部作品'),
@@ -69,7 +70,8 @@ function renderChart(body, items) {
       element('span', { class: 'bgmcy-percent', text: percent }),
     ]));
   }
-  const children = [summary, chart];
+  const histogram = mode !== 'list' && data.rows.length ? createHistogram(data, mode) : null;
+  const children = [summary, ...(histogram ? [histogram.root] : mode === 'list' ? [chart] : [])];
   if (!data.total) children.push(element('p', { class: 'bgmcy-empty', text: '暂无收藏' }));
   if (data.unknown.length) {
     const details = element('details', { class: 'bgmcy-unknown' }, [
@@ -84,6 +86,7 @@ function renderChart(body, items) {
     children.push(details);
   }
   body.replaceChildren(...children);
+  return () => histogram?.destroy();
 }
 
 export function run() {
@@ -94,6 +97,7 @@ export function run() {
   let storage;
   try { storage = window.localStorage; } catch { /* unavailable */ }
   const cache = createCache(storage, viewer, route.username);
+  let mode = readChartMode(storage);
   let media = route.media || 'anime';
   let status = route.status || 'all';
   const root = element('section', { id: COMPONENT_ID, class: 'bgmcy-card' });
@@ -111,9 +115,11 @@ export function run() {
   if (route.kind === 'profile') filters.append(mediaSelect);
   else filters.append(element('span', { class: 'bgmcy-media', text: MEDIA[media].label }));
   filters.append(statusSelect);
+  const modeSelect = select('图表类型', CHART_MODES, mode);
+  const displayOptions = element('div', { class: 'bgmcy-display-options' }, [modeSelect]);
   const body = element('div', { class: 'bgmcy-body' });
   const message = element('p', { class: 'bgmcy-status', 'aria-live': 'polite', hidden: true });
-  root.append(heading, filters, body, message);
+  root.append(heading, filters, displayOptions, body, message);
   if (!mountRoot(root, route)) return;
 
   function checkCurrentPage() {
@@ -138,6 +144,18 @@ export function run() {
   let generation = 0;
   let controller;
   let alive = true;
+  let visibleItems = null;
+  let destroyChart = () => {};
+  function display(items) {
+    visibleItems = items;
+    destroyChart();
+    destroyChart = renderChart(body, items, mode);
+  }
+  modeSelect.addEventListener('change', () => {
+    mode = modeSelect.value;
+    saveChartMode(storage, mode);
+    if (visibleItems !== null) display(visibleItems);
+  });
   function showMessage(text) { message.textContent = text; message.hidden = !text; }
   async function load(force = false) {
     const current = ++generation;
@@ -147,8 +165,8 @@ export function run() {
     const tasks = tasksForSelection(media, status);
     const saved = tasks.map(task => cache.read(task.media, task.status));
     const hasAll = saved.every(Boolean);
-    if (hasAll) renderChart(body, saved.flatMap(data => data.items));
-    else body.replaceChildren();
+    if (hasAll) display(saved.flatMap(data => data.items));
+    else { visibleItems = null; destroyChart(); body.replaceChildren(); }
     if (!force && hasAll && saved.every(data => data.fresh)) {
       refresh.disabled = false;
       showMessage('');
@@ -175,7 +193,7 @@ export function run() {
       }
       await Promise.all(Array.from({ length: Math.min(3, tasks.length) }, worker));
       if (current !== generation || !alive) return;
-      renderChart(body, results.flat());
+      display(results.flat());
       showMessage('');
     } catch (error) {
       if (current !== generation || !alive) return;
