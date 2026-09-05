@@ -1,7 +1,7 @@
 // ==UserScript==
-// @name         Bangumi 收藏作品年代
+// @name         Bangumi 作品年份分布
 // @namespace    https://github.com/k-azv/bangumi-collection-years
-// @version      0.3.3
+// @version      0.3.4
 // @description  按作品发行年份查看动画、书籍、音乐、游戏与三次元收藏
 // @author       k-azv
 // @include      /^https?:\/\/(bgm\.tv|bangumi\.tv|chii\.in)\/user\/[^/?#]+\/?$/
@@ -442,7 +442,7 @@
     node2.value = value;
     return node2;
   }
-  function renderChart(body, items, mode) {
+  function renderChart(body, items, mode, modeSelect) {
     const data = distribution(items);
     const summary = element("p", { class: "bgmcy-summary" }, [
       element("strong", { text: String(data.total) }),
@@ -462,7 +462,7 @@
       ]));
     }
     const histogram = mode !== "list" && data.rows.length ? createHistogram(data, mode) : null;
-    const children = [summary, ...histogram ? [histogram.root] : mode === "list" ? [chart] : []];
+    const children = [element("div", { class: "bgmcy-summary-line" }, [summary, modeSelect]), ...histogram ? [histogram.root] : mode === "list" ? [chart] : []];
     if (!data.total) children.push(element("p", { class: "bgmcy-empty", text: "\u6682\u65E0\u6536\u85CF" }));
     if (data.unknown.length) {
       const details = element("details", { class: "bgmcy-unknown" }, [
@@ -495,7 +495,7 @@
     let status = route.status || "all";
     const root = element("div", { id: COMPONENT_ID, class: "bgmcy-card" });
     const refresh = element("button", { type: "button", class: "bgmcy-refresh", text: "\u5237\u65B0", "aria-label": "\u5237\u65B0\u6536\u85CF\u7EDF\u8BA1" });
-    const heading = element("div", { class: "bgmcy-heading" }, [element("h2", { text: "\u6536\u85CF\u4F5C\u54C1\u5E74\u4EE3" })]);
+    const footer = element("div", { class: "bgmcy-footer" }, [element("span", { text: "\u4F5C\u54C1\u5E74\u4EFD\u5206\u5E03" }), refresh]);
     const filters = element("div", { class: "bgmcy-filters" });
     const mediaSelect = select("\u6536\u85CF\u7C7B\u522B", ["book", "anime", "music", "game", "real"].map((key) => [key, MEDIA[key].label]), media);
     const statusSelect = select("\u6536\u85CF\u72B6\u6001", [], status);
@@ -547,10 +547,9 @@
     filters.append(mediaSelect, statusSelect, categoryTabs, statusTabs);
     updateTabs();
     const modeSelect = select("\u56FE\u8868\u7C7B\u578B", CHART_MODES, mode);
-    heading.append(modeSelect);
     const body = element("div", { class: "bgmcy-body" });
     const message = element("p", { class: "bgmcy-status", "aria-live": "polite", hidden: true });
-    root.append(heading, filters, body, refresh, message);
+    root.append(filters, body, message, footer);
     if (!mountRoot(root, route)) return;
     const alignTabs = () => {
       positionIndicator(categoryTabs);
@@ -585,7 +584,7 @@
     function display(items) {
       visibleItems = items;
       destroyChart();
-      destroyChart = renderChart(body, items, mode);
+      destroyChart = renderChart(body, items, mode, modeSelect);
     }
     modeSelect.addEventListener("change", () => {
       mode = modeSelect.value;

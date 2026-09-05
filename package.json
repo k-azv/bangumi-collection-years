@@ -1,6 +1,6 @@
 {
   "name": "bangumi-collection-years",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "private": true,
   "type": "module",
   "description": "Bangumi 超合金组件：按作品发行年份查看动画、书籍、音乐、游戏与三次元收藏。",

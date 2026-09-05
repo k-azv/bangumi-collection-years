@@ -52,7 +52,7 @@ function select(label, options, value) {
   return node;
 }
 
-function renderChart(body, items, mode) {
+function renderChart(body, items, mode, modeSelect) {
   const data = distribution(items);
   const summary = element('p', { class: 'bgmcy-summary' }, [
     element('strong', { text: String(data.total) }), document.createTextNode(' 部作品'),
@@ -71,7 +71,7 @@ function renderChart(body, items, mode) {
     ]));
   }
   const histogram = mode !== 'list' && data.rows.length ? createHistogram(data, mode) : null;
-  const children = [summary, ...(histogram ? [histogram.root] : mode === 'list' ? [chart] : [])];
+  const children = [element('div', { class: 'bgmcy-summary-line' }, [summary, modeSelect]), ...(histogram ? [histogram.root] : mode === 'list' ? [chart] : [])];
   if (!data.total) children.push(element('p', { class: 'bgmcy-empty', text: '暂无收藏' }));
   if (data.unknown.length) {
     const details = element('details', { class: 'bgmcy-unknown' }, [
@@ -102,7 +102,7 @@ export function run() {
   let status = route.status || 'all';
   const root = element('div', { id: COMPONENT_ID, class: 'bgmcy-card' });
   const refresh = element('button', { type: 'button', class: 'bgmcy-refresh', text: '刷新', 'aria-label': '刷新收藏统计' });
-  const heading = element('div', { class: 'bgmcy-heading' }, [element('h2', { text: '收藏作品年代' })]);
+  const footer = element('div', { class: 'bgmcy-footer' }, [element('span', { text: '作品年份分布' }), refresh]);
   const filters = element('div', { class: 'bgmcy-filters' });
   const mediaSelect = select('收藏类别', ['book', 'anime', 'music', 'game', 'real'].map(key => [key, MEDIA[key].label]), media);
   const statusSelect = select('收藏状态', [], status);
@@ -149,10 +149,10 @@ export function run() {
   filters.append(mediaSelect, statusSelect, categoryTabs, statusTabs);
   updateTabs();
   const modeSelect = select('图表类型', CHART_MODES, mode);
-  heading.append(modeSelect);
+
   const body = element('div', { class: 'bgmcy-body' });
   const message = element('p', { class: 'bgmcy-status', 'aria-live': 'polite', hidden: true });
-  root.append(heading, filters, body, refresh, message);
+  root.append(filters, body, message, footer);
   if (!mountRoot(root, route)) return;
   const alignTabs = () => { positionIndicator(categoryTabs); positionIndicator(statusTabs); };
   if (typeof ResizeObserver !== 'undefined') new ResizeObserver(alignTabs).observe(filters);
@@ -185,7 +185,7 @@ export function run() {
   function display(items) {
     visibleItems = items;
     destroyChart();
-    destroyChart = renderChart(body, items, mode);
+    destroyChart = renderChart(body, items, mode, modeSelect);
   }
   modeSelect.addEventListener('change', () => {
     mode = modeSelect.value;
