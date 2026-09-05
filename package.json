@@ -1,6 +1,6 @@
 {
   "name": "bangumi-collection-years",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "description": "Bangumi 超合金组件：按作品发行年份查看动画、书籍、音乐、游戏与三次元收藏。",
@@ -9,7 +9,7 @@
     "demo": "node scripts/e2e-server.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
-    "check": "npm run test && npm run build"
+    "check": "npm run build && npm run test"
   },
   "devDependencies": {
     "esbuild": "^0.25.9",

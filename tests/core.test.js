@@ -29,8 +29,8 @@ describe('收藏页解析', () => {
       <li id="item_341"><p class="info tip">1话 / 遠田おと / 20</p><p class="collectInfo"><span class="tip_j">2024-1-2</span></p></li>
     </ul>`);
     expect(parseCollectionDocument(page, 'anime', 'wish')).toEqual([
-      { subjectId: '340', media: 'anime', status: 'wish', year: 2005, private: true },
-      { subjectId: '341', media: 'anime', status: 'wish', year: null, private: false },
+      { subjectId: '340', title: '#340', media: 'anime', status: 'wish', year: 2005, private: true },
+      { subjectId: '341', title: '#341', media: 'anime', status: 'wish', year: null, private: false },
     ]);
   });
 
@@ -102,4 +102,32 @@ describe('fetchCollectionPages', () => {
     expect(fetchImpl).toHaveBeenCalledTimes(2);
     vi.unstubAllGlobals();
   });
+});
+
+describe('详情页补全年份', () => {
+  it('从随心一听的连载开始识别2022年，区分上映待定', async () => {
+    const {parseSubjectDate}=await import('../src/core.js');
+    expect(parseSubjectDate(doc('<ul id="infobox"><li>连载开始: 2022-07-04</li><li>连载结束: 2023-01-01</li></ul>'),'book')).toEqual({year:2022,dateState:'dated'});
+    expect(parseSubjectDate(doc('<ul id="infobox"><li>上映年度: *</li></ul>'),'anime')).toEqual({year:null,dateState:'pending'});
+    expect(parseSubjectDate(doc('<ul id="infobox"><li>原作: Project 2020</li></ul>'),'anime')).toEqual({year:null,dateState:'unknown'});
+  });
+  it('仅对列表日期缺失的作品同源读取详情', async () => {
+    const {completeSubjectDates}=await import('../src/core.js');
+    vi.stubGlobal('location',new URL('https://bgm.tv/user/kazv'));
+    vi.stubGlobal('DOMParser',new JSDOM('').window.DOMParser);
+    const fetchImpl=vi.fn(async()=>({ok:true,text:async()=>'<ul id="infobox"><li>连载开始: 2022-07-04</li></ul>'}));
+    const result=await completeSubjectDates([{subjectId:'388782',media:'book',year:null},{subjectId:'2',media:'book',year:2000}],{fetchImpl});
+    expect(result.map(item=>item.year)).toEqual([2022,2000]);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(fetchImpl.mock.calls[0][0]).toBe('https://bgm.tv/subject/388782');
+    vi.unstubAllGlobals();
+  });
+});
+it('分布按筛选后的总数计算占比，保留待定项', async()=>{
+  const {distribution,tasksForSelection}=await import('../src/core.js');
+  expect(tasksForSelection('game','do')).toEqual([{media:'game',status:'do'}]);
+  const data=distribution([{subjectId:'1',media:'anime',year:2020},{subjectId:'2',media:'anime',year:2020},{subjectId:'3',media:'anime',year:null}]);
+  expect(data.total).toBe(3);
+  expect(data.rows[0].percent).toBeCloseTo(200/3);
+  expect(data.unknown).toHaveLength(1);
 });

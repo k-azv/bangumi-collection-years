@@ -9,8 +9,8 @@ const media = ['anime', 'book', 'music', 'game', 'real'];
 function pageShell() {
   return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Bangumi 收藏作品年代测试</title><link rel="stylesheet" href="/dist/gadget.css">
-  <style>body{margin:0;background:#f5f5f5;color:#555;font:12px Arial,sans-serif}.wrapperNeue{max-width:1100px;margin:auto;background:#fff;min-height:100vh;padding:18px}.nameSingle{color:#f09199}#user_home{width:70%}.section{min-height:100px;border-top:1px solid #eee;padding-top:10px}@media(max-width:640px){.wrapperNeue{padding:8px}#user_home{width:100%}}</style></head>
-  <body><div class="wrapperNeue"><div id="dock"><ul><li class="first"><a href="/user/kazv">kazv</a></li></ul></div><h1 class="nameSingle">kazv <small>@kazv</small></h1><main id="user_home"><div class="user_box clearit">Bangumi 2020 加入</div><div id="anime" class="section sort">我的动画</div></main></div><script src="/dist/gadget.js"></script></body></html>`;
+  <style>body{margin:0;background:#f5f5f5;color:#555;font:12px Arial,sans-serif}.wrapperNeue{max-width:1100px;margin:auto;background:#fff;min-height:100vh;padding:18px}.nameSingle{color:#f09199}#user_home{width:68%;float:left}#columnB{width:30%;float:right}.section{min-height:100px;border-top:1px solid #eee;padding-top:10px}@media(max-width:640px){.wrapperNeue{padding:8px}#user_home{width:100%;float:none}#columnB{width:100%;float:none}}</style></head>
+  <body><div class="wrapperNeue"><div id="dock"><ul><li class="first"><a href="/user/kazv">kazv</a></li></ul></div><h1 class="nameSingle">kazv <small>@kazv</small></h1><main id="user_home"><div class="user_box clearit">Bangumi 2020 加入</div><div id="anime" class="section sort">我的动画</div></main><aside id="columnB"></aside></div><script src="/dist/gadget.js"></script></body></html>`;
 }
 
 function collectionPage(pathname) {

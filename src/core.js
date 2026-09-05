@@ -57,6 +57,7 @@ export function parseCollectionDocument(doc, media, status) {
     const collectionInfo = element.querySelector('.collectInfo')?.textContent?.trim() || '';
     items.push({
       subjectId,
+      title: element.querySelector("h3 a")?.textContent?.trim() || `#${subjectId}`,
       media,
       status,
       year: extractReleaseYear(subjectInfo),
@@ -130,6 +131,9 @@ export async function fetchCollectionPages({ media, username, status, fetchImpl 
     if (doc.querySelector('form[action*="/login"]') && !doc.querySelector('#browserItemList')) {
       throw new Error('登录状态已失效，请重新登录 Bangumi 后重试');
     }
+    if (!doc.querySelector('#browserItemList') && !doc.querySelector('#columnSubjectBrowserA')) {
+      throw new Error('收藏页面读取失败，请稍后重试');
+    }
     const pageItems = parseCollectionDocument(doc, media, status);
     items.push(...pageItems);
     onPage?.({ url, count: pageItems.length, total: items.length });
@@ -141,4 +145,63 @@ export async function fetchCollectionPages({ media, username, status, fetchImpl 
 
 export function mediaForRoute(route) {
   return route.kind === 'list' ? [route.media] : Object.keys(MEDIA);
+}
+
+const RELEASE_FIELDS = {
+  anime: ['放送开始', '上映年度', '上映日期', '首播', '发售日', '发行日期'],
+  book: ['发售日', '发行日期', '出版日期', '出版年', '连载开始'],
+  music: ['发售日期', '发售日', '发行日期', '发行时间'],
+  game: ['发行日期', '发售日', '发售日期'],
+  real: ['开始', '放送开始', '上映年度', '上映日期', '首播', '发行日期'],
+};
+
+export function parseSubjectDate(doc, media) {
+  const years = [];
+  let pending = false;
+  for (const field of doc.querySelectorAll('#infobox > li')) {
+    const text = field.textContent.trim();
+    const colon = text.search(/[:：]/);
+    if (colon < 0 || !RELEASE_FIELDS[media]?.includes(text.slice(0, colon).trim())) continue;
+    const value = text.slice(colon + 1).trim();
+    const year = extractReleaseYear(value);
+    if (year) years.push(year);
+    else if (/^(?:\*|未定|待定|TBA|TBD)$/i.test(value)) pending = true;
+  }
+  return { year: years.length ? Math.min(...years) : null, dateState: years.length ? 'dated' : pending ? 'pending' : 'unknown' };
+}
+
+export async function completeSubjectDates(items, { fetchImpl = fetch, signal } = {}) {
+  const result = items.map(item => ({ ...item }));
+  const missing = result.filter(item => !item.year);
+  let cursor = 0;
+  async function worker() {
+    while (cursor < missing.length) {
+      const item = missing[cursor++];
+      const response = await fetchImpl(new URL(`/subject/${item.subjectId}`, location.origin).href, {
+        credentials: 'same-origin', headers: { Accept: 'text/html' }, signal,
+      });
+      if (!response.ok) throw new Error('作品日期读取失败，请稍后重试');
+      const doc = new DOMParser().parseFromString(await response.text(), 'text/html');
+      if (!doc.querySelector('#infobox')) throw new Error('作品日期读取失败，请稍后重试');
+      Object.assign(item, parseSubjectDate(doc, item.media));
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(2, missing.length) }, worker));
+  return result;
+}
+
+export function tasksForSelection(media, status) {
+  return (media === 'all' ? Object.keys(MEDIA) : [media]).flatMap(key =>
+    (status === 'all' ? STATUS_ORDER : [status]).map(value => ({ media: key, status: value })));
+}
+
+export function distribution(items) {
+  const unique = [...new Map(items.map(item => [`${item.media}:${item.subjectId}`, item])).values()];
+  const counts = new Map();
+  for (const item of unique) if (item.year) counts.set(item.year, (counts.get(item.year) || 0) + 1);
+  return {
+    total: unique.length,
+    unknown: unique.filter(item => !item.year),
+    rows: [...counts].sort(([a], [b]) => b - a).map(([year, count]) => ({ year, count, percent: count / unique.length * 100 })),
+  };
 }
