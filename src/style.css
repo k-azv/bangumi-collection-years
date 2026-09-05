@@ -5,15 +5,21 @@
   box-sizing: border-box;
   margin: 0 0 20px;
   font: inherit;
+  color: #666;
+  background: #fff;
+  border: 1px solid #e8e8e8;
+  border-radius: 15px;
+  box-shadow: 0 0 4px #eaeaea;
+  padding: 8px;
   min-width: 0;
   width: 100%;
 }
 #bgm-collection-years *, #bgm-collection-years *::before { box-sizing: border-box; }
 #bgm-collection-years .bgmcy-heading {
   display: flex; align-items: center; justify-content: space-between;
-  gap: 8px; padding: 0;
+  gap: 8px; padding: 2px 4px 8px;
 }
-#bgm-collection-years h2 { margin: 0; font-size: 13px; font-weight: normal; line-height: 40px; }
+#bgm-collection-years h2 { margin: 0; font-size: 13px; font-weight: normal; line-height: 28px; }
 #bgm-collection-years .bgmcy-refresh { border: 0; padding: 2px; background: transparent; color: #0084b4; cursor: pointer; font: inherit; flex-shrink: 0; }
 #bgm-collection-years .bgmcy-refresh:disabled { color: #aaa; cursor: wait; }
 #bgm-collection-years .bgmcy-filters { display: flex; align-items: center; gap: 8px; padding: 10px 2px 0; }
@@ -41,7 +47,7 @@
   #bgm-collection-years { margin-bottom: 14px; }
   #bgm-collection-years select, #bgm-collection-years .bgmcy-refresh { min-height: 32px; }
 }
-html[data-theme="dark"] #bgm-collection-years { --bgmcy-line: #444; }
+html[data-theme="dark"] #bgm-collection-years { --bgmcy-line: #444; color:#ccc; background:#222; border-color:#333; box-shadow:0 0 4px #111; }
 
 html[data-theme="dark"] #bgm-collection-years h2 { color: #ccc; }
 html[data-theme="dark"] #bgm-collection-years select { background: #222; border-color: #555; }
@@ -71,7 +77,7 @@ html[data-theme="dark"] #bgm-collection-years .bgmcy-histogram button { color:#7
 #bgm-collection-years .bgmcy-plot-targets { position:absolute; top:25px; bottom:38px; left:32px; right:8px; display:grid; }
 #bgm-collection-years .bgmcy-plot-targets button { display:block; min-width:0; padding:0; border:0; background:transparent; border-radius:0; }
 
-#bgm-collection-years .bgmcy-heading select { color:#009bc6; padding:4px 6px; font-size:12px; }
+#bgm-collection-years .bgmcy-heading select { color:#009bc6; padding:5px 8px; font-size:12px; border:1px solid #eee; background:#f7f7f7; box-shadow:none; }
 #bgm-collection-years .bgmcy-filters { display:block; padding:4px; margin:3px 0 10px; background:#f7f7f7; border:2px solid #fff; border-radius:24px; box-shadow:0 2px 7px #00000014; }
 #bgm-collection-years .bgmcy-tabs { position:relative; display:flex; align-items:center; isolation:isolate; }
 #bgm-collection-years .bgmcy-tabs button { position:relative; flex:1; min-width:0; border:0; background:transparent; color:#009bc6; font:inherit; font-size:13px; padding:9px 2px; white-space:nowrap; border-radius:22px; cursor:pointer; transition:color .15s; }

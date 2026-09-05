@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bangumi 收藏作品年代
 // @namespace    https://github.com/k-azv/bangumi-collection-years
-// @version      0.3.2
+// @version      0.3.3
 // @description  按作品发行年份查看动画、书籍、音乐、游戏与三次元收藏
 // @author       k-azv
 // @include      /^https?:\/\/(bgm\.tv|bangumi\.tv|chii\.in)\/user\/[^/?#]+\/?$/
@@ -493,7 +493,7 @@
     let mode = readChartMode(storage);
     let media = route.media || "anime";
     let status = route.status || "all";
-    const root = element("div", { id: COMPONENT_ID, class: "SidePanel png_bg bgmcy-card" });
+    const root = element("div", { id: COMPONENT_ID, class: "bgmcy-card" });
     const refresh = element("button", { type: "button", class: "bgmcy-refresh", text: "\u5237\u65B0", "aria-label": "\u5237\u65B0\u6536\u85CF\u7EDF\u8BA1" });
     const heading = element("div", { class: "bgmcy-heading" }, [element("h2", { text: "\u6536\u85CF\u4F5C\u54C1\u5E74\u4EE3" })]);
     const filters = element("div", { class: "bgmcy-filters" });
