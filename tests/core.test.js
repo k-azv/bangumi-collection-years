@@ -136,3 +136,12 @@ it('统计请求必须属于具体的站点类别', async()=>{
   expect(()=>tasksForSelection('all','collect')).toThrow('请选择作品类别');
   expect(tasksForSelection('book','collect')).toEqual([{media:'book',status:'collect'}]);
 });
+it('多个状态分页并发共享请求上限，完成结果保持页序',async()=>{
+ const {createRequestQueue}=await import('../src/core.js');
+ vi.stubGlobal('location',new URL('https://bgm.tv'));vi.stubGlobal('DOMParser',new JSDOM('').window.DOMParser);
+ let active=0,peak=0;
+ const fetcher=async url=>{active++;peak=Math.max(peak,active);await new Promise(r=>setTimeout(r,5));active--;const page=Number(new URL(url).searchParams.get('page')||1);return {ok:true,text:async()=>`<ul id="browserItemList"><li id="item_${page}"><p class="info tip">2020-01-01</p></li></ul><div class="page_inner"><a href="?page=6">6</a></div>`};};
+ const fetchImpl=createRequestQueue(new AbortController().signal,4,fetcher);
+ const results=await Promise.all(['wish','collect'].map(status=>fetchCollectionPages({media:'anime',username:'test',status,fetchImpl})));
+ expect(peak).toBe(4);expect(results.map(items=>items.map(x=>x.subjectId))).toEqual([['1','2','3','4','5','6'],['1','2','3','4','5','6']]);vi.unstubAllGlobals();
+});

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bangumi 作品年份分布
 // @namespace    https://github.com/k-azv/bangumi-collection-years
-// @version      0.3.7
+// @version      0.3.8
 // @description  按作品发行年份查看动画、书籍、音乐、游戏与三次元收藏
 // @author       k-azv
 // @include      /^https?:\/\/(bgm\.tv|bangumi\.tv|chii\.in)\/user\/[^/?#]+\/?$/
@@ -70,22 +70,19 @@
     }
     return items;
   }
-  function getNextPageUrl(doc, currentUrl) {
-    const current = doc.querySelector(".page_inner .p_cur");
-    const next = current?.nextElementSibling;
-    if (!next?.matches("a.p[href]")) return null;
-    return new URL(next.getAttribute("href"), currentUrl).href;
-  }
   async function fetchCollectionPages({ media, username, status, fetchImpl = fetch, onPage, signal }) {
     let url = new URL(`/${media}/list/${encodeURIComponent(username)}/${status}`, location.origin).href;
-    const items = [];
-    const visited = /* @__PURE__ */ new Set();
-    while (url && !visited.has(url)) {
-      visited.add(url);
+    const base = url;
+    const pages = [];
+    let last = 1;
+    async function readPage(page) {
+      const target = new URL(base);
+      if (page > 1) target.searchParams.set("page", String(page));
+      const url2 = target.href;
       let response;
       for (let attempt = 0; attempt < 3; attempt += 1) {
         try {
-          response = await fetchImpl(url, {
+          response = await fetchImpl(url2, {
             credentials: "same-origin",
             headers: { Accept: "text/html" },
             signal
@@ -106,11 +103,60 @@
         throw new Error("\u6536\u85CF\u9875\u9762\u8BFB\u53D6\u5931\u8D25\uFF0C\u8BF7\u7A0D\u540E\u91CD\u8BD5");
       }
       const pageItems = parseCollectionDocument(doc, media, status);
-      items.push(...pageItems);
-      onPage?.({ url, count: pageItems.length, total: items.length });
-      url = getNextPageUrl(doc, url);
+      pages[page - 1] = pageItems;
+      onPage?.({ url: url2, count: pageItems.length });
+      for (const link of doc.querySelectorAll(".page_inner a[href]")) {
+        const next = new URL(link.getAttribute("href"), url2);
+        const number = Number(next.searchParams.get("page"));
+        if (next.origin === target.origin && next.pathname === target.pathname && Number.isInteger(number) && number > last && number <= 1e4) last = number;
+      }
     }
-    return items;
+    await readPage(1);
+    let cursor = 2;
+    async function worker() {
+      while (cursor <= last) {
+        if (signal?.aborted) throw signal.reason;
+        await readPage(cursor++);
+      }
+    }
+    await Promise.all(Array.from({ length: 3 }, worker));
+    return pages.flat();
+  }
+  function createRequestQueue(signal, limit = 4, fetchImpl = fetch) {
+    let active = 0;
+    const waiting = [];
+    function pump() {
+      while (active < limit && waiting.length) {
+        const { url, options, resolve, reject } = waiting.shift();
+        if (signal?.aborted) {
+          reject(signal.reason);
+          continue;
+        }
+        active++;
+        const controller = new AbortController();
+        const abort = () => controller.abort(signal.reason);
+        signal?.addEventListener("abort", abort, { once: true });
+        const timer = setTimeout(() => controller.abort(new Error("\u8BF7\u6C42\u8D85\u65F6\uFF0C\u8BF7\u91CD\u8BD5")), 15e3);
+        (async () => {
+          try {
+            const response = await fetchImpl(url, { ...options, signal: controller.signal });
+            const text = await response.text();
+            resolve({ ok: response.ok, status: response.status, text: async () => text });
+          } catch (error) {
+            reject(error);
+          } finally {
+            clearTimeout(timer);
+            signal?.removeEventListener("abort", abort);
+            active--;
+            pump();
+          }
+        })();
+      }
+    }
+    return (url, options) => new Promise((resolve, reject) => {
+      waiting.push({ url, options, resolve, reject });
+      pump();
+    });
   }
   var RELEASE_FIELDS = {
     anime: ["\u653E\u9001\u5F00\u59CB", "\u4E0A\u6620\u5E74\u5EA6", "\u4E0A\u6620\u65E5\u671F", "\u9996\u64AD", "\u53D1\u552E\u65E5", "\u53D1\u884C\u65E5\u671F"],
@@ -202,10 +248,10 @@
       const data = ram && (!disk || ram.at >= disk.at) ? ram : disk;
       return data ? { ...data, fresh: now() >= data.at && now() - data.at < CACHE_TTL } : null;
     }
-    function write(media, status, items) {
+    function write(media, status, items, pageCount) {
       const old = read(media, status);
       if (old && JSON.stringify(old.items) === JSON.stringify(items)) items = old.items;
-      const data = { at: now(), items };
+      const data = { at: now(), items, pageCount };
       memory.set(key(media, status), data);
       try {
         const entries = [];
@@ -591,6 +637,7 @@
     if (typeof ResizeObserver !== "undefined") new ResizeObserver(alignTabs).observe(filters);
     alignTabs();
     const itemIndexes = /* @__PURE__ */ new WeakMap();
+    const pageCounts = /* @__PURE__ */ new Map();
     function checkCurrentPage() {
       const affected = /* @__PURE__ */ new Set();
       for (const link of document.querySelectorAll('a[href*="/list/"]')) {
@@ -599,7 +646,10 @@
         const count = link.textContent.match(/(?:\(|\s)(\d+)\)?\s*$/)?.[1];
         if (count === void 0) continue;
         const saved = cache.read(linked.media, linked.status);
-        if (saved && count !== void 0 && Number(count) !== saved.items.length) affected.add(`${linked.media}:${linked.status}`);
+        const countKey = `${linked.media}:${linked.status}`;
+        const previousCount = pageCounts.get(countKey) ?? saved?.pageCount;
+        pageCounts.set(countKey, Number(count));
+        if (saved && previousCount !== void 0 && Number(count) !== previousCount) affected.add(`${linked.media}:${linked.status}`);
       }
       if (route.kind === "list" && route.status) {
         const saved = cache.read(route.media, route.status);
@@ -657,6 +707,7 @@
       controller?.abort();
       controller = new AbortController();
       const signal = controller.signal;
+      const fetchImpl = createRequestQueue(signal);
       const tasks = tasksForSelection(media, status);
       const saved = tasks.map((task) => cache.read(task.media, task.status));
       const hasAll = saved.every(Boolean);
@@ -685,10 +736,10 @@
             const task = tasks[index];
             if (!force && saved[index]?.fresh) results[index] = saved[index].items;
             else {
-              const items = await fetchCollectionPages({ ...task, username: route.username, signal });
-              const completed = await completeSubjectDates(items, { signal });
+              const items = await fetchCollectionPages({ ...task, username: route.username, signal, fetchImpl });
+              const completed = await completeSubjectDates(items, { signal, fetchImpl });
               if (signal.aborted) return;
-              results[index] = cache.write(task.media, task.status, completed);
+              results[index] = cache.write(task.media, task.status, completed, pageCounts.get(`${task.media}:${task.status}`));
             }
           }
         }

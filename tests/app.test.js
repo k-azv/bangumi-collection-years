@@ -167,3 +167,14 @@ it('刷新返回相同内容保留图表，外部缓存更新显示新数据',as
  dom.window.document.dispatchEvent(new dom.window.Event('visibilitychange'));
  expect(dom.window.document.querySelector('.bgmcy-summary').textContent).toContain('0');
 });
+it('他人页面计数大于可见收藏时复用缓存，页面计数变化时刷新',async()=>{
+ dom=new JSDOM('<a href="/anime/list/other/collect">看过 (637)</a><div id="columnB"></div>',{url:'https://bgm.tv/user/other',runScripts:'outside-only',pretendToBeVisual:true});
+ for(const status of ['wish','collect','do','on_hold','dropped'])dom.window.localStorage.setItem(`bgmcy:v2:guest:other:anime:${status}`,JSON.stringify({at:Date.now(),pageCount:status==='collect'?637:undefined,items:[]}));
+ dom.window.fetch=vi.fn(async()=>({ok:true,text:async()=>'<ul id="browserItemList"></ul>'}));
+ dom.window.eval(readFileSync('dist/gadget.js','utf8'));
+ dom.window.document.dispatchEvent(new dom.window.Event('visibilitychange'));
+ expect(dom.window.fetch).not.toHaveBeenCalled();
+ dom.window.document.querySelector('a').textContent='看过 (638)';
+ dom.window.document.dispatchEvent(new dom.window.Event('visibilitychange'));
+ await vi.waitFor(()=>expect(dom.window.fetch).toHaveBeenCalledTimes(1));
+});

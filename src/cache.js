@@ -29,11 +29,11 @@ export function createCache(storage, viewer, username, now = Date.now) {
     const data = ram && (!disk || ram.at >= disk.at) ? ram : disk;
     return data ? { ...data, fresh: now() >= data.at && now() - data.at < CACHE_TTL } : null;
   }
-  function write(media, status, items) {
+  function write(media, status, items, pageCount) {
     const old = read(media, status);
     // Compare only on writes; unchanged responses retain their data identity.
     if (old && JSON.stringify(old.items) === JSON.stringify(items)) items = old.items;
-    const data = { at: now(), items };
+    const data = { at: now(), items, pageCount };
     memory.set(key(media, status), data);
     try {
       const entries = [];

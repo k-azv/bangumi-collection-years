@@ -106,11 +106,13 @@ export function aggregateCollections(items) {
 
 export async function fetchCollectionPages({ media, username, status, fetchImpl = fetch, onPage, signal }) {
   let url = new URL(`/${media}/list/${encodeURIComponent(username)}/${status}`, location.origin).href;
-  const items = [];
-  const visited = new Set();
-
-  while (url && !visited.has(url)) {
-    visited.add(url);
+  const base = url;
+  const pages = [];
+  let last = 1;
+  async function readPage(page) {
+    const target = new URL(base);
+    if (page > 1) target.searchParams.set('page', String(page));
+    const url = target.href;
     let response;
     for (let attempt = 0; attempt < 3; attempt += 1) {
       try {
@@ -135,12 +137,49 @@ export async function fetchCollectionPages({ media, username, status, fetchImpl 
       throw new Error('收藏页面读取失败，请稍后重试');
     }
     const pageItems = parseCollectionDocument(doc, media, status);
-    items.push(...pageItems);
-    onPage?.({ url, count: pageItems.length, total: items.length });
-    url = getNextPageUrl(doc, url);
+    pages[page - 1] = pageItems;
+    onPage?.({ url, count: pageItems.length });
+    for (const link of doc.querySelectorAll('.page_inner a[href]')) {
+      const next = new URL(link.getAttribute('href'), url);
+      const number = Number(next.searchParams.get('page'));
+      if (next.origin === target.origin && next.pathname === target.pathname && Number.isInteger(number) && number > last && number <= 10000) last = number;
+    }
   }
+  await readPage(1);
+  let cursor = 2;
+  async function worker() {
+    while (cursor <= last) {
+      if (signal?.aborted) throw signal.reason;
+      await readPage(cursor++);
+    }
+  }
+  await Promise.all(Array.from({ length: 3 }, worker));
+  return pages.flat();
+}
 
-  return items;
+export function createRequestQueue(signal, limit = 4, fetchImpl = fetch) {
+  let active = 0;
+  const waiting = [];
+  function pump() {
+    while (active < limit && waiting.length) {
+      const { url, options, resolve, reject } = waiting.shift();
+      if (signal?.aborted) { reject(signal.reason); continue; }
+      active++;
+      const controller = new AbortController();
+      const abort = () => controller.abort(signal.reason);
+      signal?.addEventListener('abort', abort, { once: true });
+      const timer = setTimeout(() => controller.abort(new Error('请求超时，请重试')), 15000);
+      (async () => {
+        try {
+          const response = await fetchImpl(url, { ...options, signal: controller.signal });
+          const text = await response.text();
+          resolve({ ok: response.ok, status: response.status, text: async () => text });
+        } catch (error) { reject(error); }
+        finally { clearTimeout(timer); signal?.removeEventListener('abort', abort); active--; pump(); }
+      })();
+    }
+  }
+  return (url, options) => new Promise((resolve, reject) => { waiting.push({ url, options, resolve, reject }); pump(); });
 }
 
 export function mediaForRoute(route) {

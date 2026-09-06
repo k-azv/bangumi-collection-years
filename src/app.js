@@ -1,5 +1,5 @@
 import {
-  MEDIA, STATUS_LABELS, STATUS_ORDER, completeSubjectDates, distribution,
+  createRequestQueue, MEDIA, STATUS_LABELS, STATUS_ORDER, completeSubjectDates, distribution,
   fetchCollectionPages, getSignedInUsername, parseCollectionDocument, parseRoute, tasksForSelection,
 } from './core.js';
 import { createCache } from './cache.js';
@@ -159,6 +159,7 @@ export function run() {
   alignTabs();
 
   const itemIndexes = new WeakMap();
+  const pageCounts = new Map();
   function checkCurrentPage() {
     const affected = new Set();
     // Counts on the profile and status tabs detect additions/removals between visits.
@@ -168,7 +169,10 @@ export function run() {
       const count = link.textContent.match(/(?:\(|\s)(\d+)\)?\s*$/)?.[1];
       if (count === undefined) continue;
       const saved = cache.read(linked.media, linked.status);
-      if (saved && count !== undefined && Number(count) !== saved.items.length) affected.add(`${linked.media}:${linked.status}`);
+      const countKey = `${linked.media}:${linked.status}`;
+      const previousCount = pageCounts.get(countKey) ?? saved?.pageCount;
+      pageCounts.set(countKey, Number(count));
+      if (saved && previousCount !== undefined && Number(count) !== previousCount) affected.add(`${linked.media}:${linked.status}`);
     }
     if (route.kind === 'list' && route.status) {
       const saved = cache.read(route.media, route.status);
@@ -219,6 +223,7 @@ export function run() {
     controller?.abort();
     controller = new AbortController();
     const signal = controller.signal;
+    const fetchImpl = createRequestQueue(signal);
     const tasks = tasksForSelection(media, status);
     const saved = tasks.map(task => cache.read(task.media, task.status));
     const hasAll = saved.every(Boolean);
@@ -241,10 +246,10 @@ export function run() {
           const task = tasks[index];
           if (!force && saved[index]?.fresh) results[index] = saved[index].items;
           else {
-            const items = await fetchCollectionPages({ ...task, username: route.username, signal });
-            const completed = await completeSubjectDates(items, { signal });
+            const items = await fetchCollectionPages({ ...task, username: route.username, signal, fetchImpl });
+            const completed = await completeSubjectDates(items, { signal, fetchImpl });
             if (signal.aborted) return;
-            results[index] = cache.write(task.media, task.status, completed);
+            results[index] = cache.write(task.media, task.status, completed, pageCounts.get(`${task.media}:${task.status}`));
           }
         }
       }
