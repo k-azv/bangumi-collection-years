@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bangumi 作品年份分布
 // @namespace    https://github.com/k-azv/bangumi-collection-years
-// @version      0.3.5
+// @version      0.3.6
 // @description  按作品发行年份查看动画、书籍、音乐、游戏与三次元收藏
 // @author       k-azv
 // @include      /^https?:\/\/(bgm\.tv|bangumi\.tv|chii\.in)\/user\/[^/?#]+\/?$/
@@ -175,10 +175,19 @@
   var PREFIX = "bgmcy:v2:";
   function createCache(storage, viewer, username, now = Date.now) {
     const scope = `${PREFIX}${encodeURIComponent(viewer || "guest")}:${encodeURIComponent(username)}:`;
+    const memory = /* @__PURE__ */ new Map();
     const key = (media, status) => `${scope}${media}:${status}`;
     function read(media, status) {
       try {
-        const data = JSON.parse(storage.getItem(key(media, status)));
+        const name = key(media, status);
+        let raw;
+        try {
+          raw = storage?.getItem(name);
+        } catch {
+        }
+        const disk = raw ? JSON.parse(raw) : null;
+        const ram = memory.get(name);
+        const data = ram && (!disk || ram.at >= disk.at) ? ram : disk;
         if (!data || !Number.isFinite(data.at) || !Array.isArray(data.items) || !data.items.every((item) => item.media === media && item.status === status && /^\d+$/.test(item.subjectId) && (item.year === null || Number.isInteger(item.year)))) return null;
         return { ...data, fresh: now() >= data.at && now() - data.at < CACHE_TTL };
       } catch {
@@ -186,16 +195,35 @@
       }
     }
     function write(media, status, items) {
+      const data = { at: now(), items };
+      memory.set(key(media, status), data);
       try {
-        storage.setItem(key(media, status), JSON.stringify({ at: now(), items }));
+        const entries = [];
+        for (let i = 0; i < storage.length; i++) {
+          const name = storage.key(i);
+          if (!name?.startsWith(PREFIX)) continue;
+          try {
+            entries.push({ name, at: JSON.parse(storage.getItem(name)).at });
+          } catch {
+            storage.removeItem(name);
+            i--;
+          }
+        }
+        entries.sort((a, b) => b.at - a.at);
+        entries.forEach((entry, index) => {
+          if (index >= 49 || now() - entry.at > 7 * 24 * 60 * 60 * 1e3) storage.removeItem(entry.name);
+        });
+        storage.setItem(key(media, status), JSON.stringify(data));
       } catch {
       }
     }
-    function invalidate(media) {
+    function invalidate(media, status) {
+      const matches = (name) => status ? name === key(media, status) : name.startsWith(`${scope}${media}:`);
+      for (const name of memory.keys()) if (matches(name)) memory.delete(name);
       try {
         for (let i = storage.length - 1; i >= 0; i--) {
           const name = storage.key(i);
-          if (name?.startsWith(`${scope}${media}:`)) storage.removeItem(name);
+          if (name && matches(name)) storage.removeItem(name);
         }
       } catch {
       }
@@ -555,24 +583,29 @@
         if (!linked?.status || linked.username !== route.username) continue;
         const count = link.textContent.match(/(?:\(|\s)(\d+)\)?\s*$/)?.[1];
         const saved = cache.read(linked.media, linked.status);
-        if (saved && count !== void 0 && Number(count) !== saved.items.length) affected.add(linked.media);
+        if (saved && count !== void 0 && Number(count) !== saved.items.length) affected.add(`${linked.media}:${linked.status}`);
       }
       if (route.kind === "list" && route.status) {
         const saved = cache.read(route.media, route.status);
         const current = parseCollectionDocument(document, route.media, route.status);
-        if (saved && current.some((item) => !saved.items.some((old) => old.subjectId === item.subjectId && old.private === item.private && (!item.year || old.year === item.year)))) affected.add(route.media);
+        if (saved && current.some((item) => !saved.items.some((old) => old.subjectId === item.subjectId && old.private === item.private && (!item.year || old.year === item.year)))) affected.add(`${route.media}:${route.status}`);
       }
-      for (const key of affected) cache.invalidate(key);
+      for (const key of affected) cache.invalidate(...key.split(":"));
       return affected.size > 0;
     }
     checkCurrentPage();
     let generation = 0;
+    let loadingKey = null;
+    let displayKey = null;
     let controller;
     let alive = true;
     let visibleItems = null;
     let destroyChart = () => {
     };
     function display(items) {
+      const key = JSON.stringify([media, status, mode, items]);
+      if (key === displayKey) return;
+      displayKey = key;
       visibleItems = items;
       destroyChart();
       destroyChart = renderChart(body, items, mode, modeSelect);
@@ -587,7 +620,10 @@
       message.hidden = !text;
     }
     async function load(force = false) {
+      const selectionKey = `${media}:${status}`;
+      if (!force && loadingKey === selectionKey && !controller?.signal.aborted) return;
       const current = ++generation;
+      loadingKey = null;
       controller?.abort();
       controller = new AbortController();
       const signal = controller.signal;
@@ -596,6 +632,7 @@
       const hasAll = saved.every(Boolean);
       if (hasAll) display(saved.flatMap((data) => data.items));
       else {
+        displayKey = null;
         visibleItems = null;
         destroyChart();
         body.replaceChildren();
@@ -605,6 +642,7 @@
         showMessage("");
         return;
       }
+      loadingKey = selectionKey;
       refresh.disabled = true;
       showMessage(hasAll ? "\u66F4\u65B0\u4E2D\u2026" : "\u52A0\u8F7D\u4E2D\u2026");
       let cursor = 0;
@@ -633,7 +671,10 @@
         controller.abort();
         showMessage(hasAll ? "\u66F4\u65B0\u5931\u8D25\uFF0C\u663E\u793A\u4E0A\u6B21\u7ED3\u679C\u3002\u8BF7\u70B9\u51FB\u5237\u65B0\u91CD\u8BD5\u3002" : error.message || "\u52A0\u8F7D\u5931\u8D25\uFF0C\u8BF7\u70B9\u51FB\u5237\u65B0\u91CD\u8BD5\u3002");
       } finally {
-        if (current === generation) refresh.disabled = false;
+        if (current === generation) {
+          loadingKey = null;
+          refresh.disabled = false;
+        }
       }
     }
     mediaSelect.addEventListener("change", () => {
@@ -660,7 +701,9 @@
           const current = JSON.stringify(fingerprint());
           if (current === previous) return;
           previous = current;
-          cache.invalidate(route.media);
+          cache.invalidate(route.media, route.status);
+          checkCurrentPage();
+          loadingKey = null;
           load();
         }, 500);
       });
@@ -668,7 +711,7 @@
     }
     document.addEventListener("visibilitychange", () => {
       if (document.visibilityState === "visible") {
-        checkCurrentPage();
+        if (checkCurrentPage()) loadingKey = null;
         load();
       }
     });

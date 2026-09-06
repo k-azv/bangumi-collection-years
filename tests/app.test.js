@@ -118,3 +118,38 @@ it('三种图表共用数据，年代展开与返回正确，切换保存偏好�
  expect(dom.window.localStorage.getItem('bgmcy:chart-mode')).toBe('list');
  expect(dom.window.fetch).not.toHaveBeenCalled();
 });
+it('加载期间切回标签页复用请求，缓存命中保留图表选择', async()=>{
+ dom=new JSDOM('<div id="columnSubjectBrowserA"></div><div id="columnSubjectBrowserB"></div>',{url:'https://bgm.tv/anime/list/kazv/collect',runScripts:'outside-only',pretendToBeVisual:true});
+ let finish;
+ dom.window.fetch=vi.fn(()=>new Promise(resolve=>{finish=resolve;}));
+ dom.window.eval(readFileSync('dist/gadget.js','utf8'));
+ for(let i=0;i<3;i++)dom.window.document.dispatchEvent(new dom.window.Event('visibilitychange'));
+ expect(dom.window.fetch).toHaveBeenCalledTimes(1);
+ finish({ok:true,text:async()=>'<ul id="browserItemList"><li id="item_1"><p class="info tip">2022-01-01</p></li></ul>'});
+ await vi.waitFor(()=>expect(dom.window.document.querySelector('.bgmcy-histogram')).not.toBeNull());
+ const chart=dom.window.document.querySelector('.bgmcy-histogram');
+ dom.window.document.dispatchEvent(new dom.window.Event('visibilitychange'));
+ expect(dom.window.document.querySelector('.bgmcy-histogram')).toBe(chart);
+ expect(dom.window.fetch).toHaveBeenCalledTimes(1);
+});
+it('收藏变化刷新受影响状态并复用概览中的其他缓存',async()=>{
+ dom=new JSDOM('<a href="/anime/list/kazv/collect">看过 (1)</a><a href="/anime/list/kazv/do">在看 (0)</a><div id="columnSubjectBrowserA"><ul id="browserItemList"><li id="item_1"><p class="info tip">2022-01-01</p></li></ul></div><div id="columnSubjectBrowserB"></div>',{url:'https://bgm.tv/anime/list/kazv/collect',runScripts:'outside-only'});
+ for(const status of ['wish','collect','do','on_hold','dropped'])dom.window.localStorage.setItem(`bgmcy:v2:guest:kazv:anime:${status}`,JSON.stringify({at:Date.now(),items:status==='collect'?[{subjectId:'1',media:'anime',status,year:2022,private:false}]:[]}));
+ dom.window.fetch=vi.fn(async()=>({ok:true,text:async()=>'<ul id="browserItemList"></ul>'}));
+ dom.window.eval(readFileSync('dist/gadget.js','utf8'));
+ const selector=dom.window.document.querySelector('[aria-label="收藏状态"]');selector.value='all';selector.dispatchEvent(new dom.window.Event('change'));
+ expect(dom.window.fetch).not.toHaveBeenCalled();
+ dom.window.document.querySelector('a').textContent='看过 (0)';dom.window.document.querySelector('#item_1').remove();
+ await vi.waitFor(()=>expect(dom.window.document.querySelector('.bgmcy-summary').textContent).toContain('0'),{timeout:2000});
+ expect(dom.window.fetch.mock.calls.map(([url])=>new URL(url).pathname)).toEqual(['/anime/list/kazv/collect']);
+});
+it('加载中切换到缓存状态再返回可正常重启原状态请求',async()=>{
+ dom=new JSDOM('<div id="columnSubjectBrowserA"></div><div id="columnSubjectBrowserB"></div>',{url:'https://bgm.tv/anime/list/kazv/collect',runScripts:'outside-only'});
+ dom.window.localStorage.setItem('bgmcy:v2:guest:kazv:anime:do',JSON.stringify({at:Date.now(),items:[]}));
+ dom.window.fetch=vi.fn((url,{signal})=>new Promise((resolve,reject)=>signal.addEventListener('abort',()=>reject(new Error('aborted')))));
+ dom.window.eval(readFileSync('dist/gadget.js','utf8'));
+ const select=dom.window.document.querySelector('[aria-label="收藏状态"]');
+ select.value='do';select.dispatchEvent(new dom.window.Event('change'));
+ select.value='collect';select.dispatchEvent(new dom.window.Event('change'));
+ expect(dom.window.fetch).toHaveBeenCalledTimes(2);
+});

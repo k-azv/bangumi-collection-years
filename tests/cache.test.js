@@ -20,6 +20,30 @@ it('缓存隔离登录身份、目标用户、类别和状态，并在六小时�
 it('存储损坏或被浏览器禁用时可以继续加载', () => {
   const cache=createCache(undefined,'kazv','kazv');
   expect(()=>cache.write('anime','collect',[item])).not.toThrow();
-  expect(cache.read('anime','collect')).toBeNull();
+  expect(cache.read('anime','collect').items).toEqual([item]);
   expect(()=>cache.invalidate('anime')).not.toThrow();
+});
+it('单个状态失效保留其他状态，写入失败复用内存中的最新数据',()=>{
+ const storage=new JSDOM('',{url:'https://bgm.tv'}).window.localStorage;
+ let time=1000;
+ const cache=createCache(storage,'kazv','kazv',()=>time);
+ cache.write('anime','collect',[item]);
+ cache.write('anime','do',[{...item,status:'do'}]);
+ cache.invalidate('anime','do');
+ expect(cache.read('anime','do')).toBeNull();
+ expect(cache.read('anime','collect').items).toEqual([item]);
+ const broken={getItem:storage.getItem.bind(storage),get length(){return storage.length},key:storage.key.bind(storage),setItem(){throw Error('quota')}};
+ const fallback=createCache(broken,'kazv','kazv',()=>++time);
+ fallback.write('anime','collect',[]);
+ expect(fallback.read('anime','collect').items).toEqual([]);
+});
+it('持久缓存容量受限并清理长期过期记录',()=>{
+ const storage=new JSDOM('',{url:'https://bgm.tv'}).window.localStorage;
+ const time=10*24*60*60*1000;
+ storage.setItem('other-app','keep');
+ storage.setItem('bgmcy:v2:guest:old:anime:collect',JSON.stringify({at:1,items:[item]}));
+ for(let i=0;i<55;i++)createCache(storage,'guest',String(i),()=>time+i).write('anime','collect',[item]);
+ expect(Object.keys(storage).filter(k=>k.startsWith('bgmcy:v2:')).length).toBeLessThanOrEqual(50);
+ expect(storage.getItem('bgmcy:v2:guest:old:anime:collect')).toBeNull();
+ expect(storage.getItem('other-app')).toBe('keep');
 });

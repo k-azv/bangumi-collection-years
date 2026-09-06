@@ -166,23 +166,28 @@ export function run() {
       if (!linked?.status || linked.username !== route.username) continue;
       const count = link.textContent.match(/(?:\(|\s)(\d+)\)?\s*$/)?.[1];
       const saved = cache.read(linked.media, linked.status);
-      if (saved && count !== undefined && Number(count) !== saved.items.length) affected.add(linked.media);
+      if (saved && count !== undefined && Number(count) !== saved.items.length) affected.add(`${linked.media}:${linked.status}`);
     }
     if (route.kind === 'list' && route.status) {
       const saved = cache.read(route.media, route.status);
       const current = parseCollectionDocument(document, route.media, route.status);
-      if (saved && current.some(item => !saved.items.some(old => old.subjectId === item.subjectId && old.private === item.private && (!item.year || old.year === item.year)))) affected.add(route.media);
+      if (saved && current.some(item => !saved.items.some(old => old.subjectId === item.subjectId && old.private === item.private && (!item.year || old.year === item.year)))) affected.add(`${route.media}:${route.status}`);
     }
-    for (const key of affected) cache.invalidate(key);
+    for (const key of affected) cache.invalidate(...key.split(':'));
     return affected.size > 0;
   }
   checkCurrentPage();
   let generation = 0;
+  let loadingKey = null;
+  let displayKey = null;
   let controller;
   let alive = true;
   let visibleItems = null;
   let destroyChart = () => {};
   function display(items) {
+    const key = JSON.stringify([media, status, mode, items]);
+    if (key === displayKey) return;
+    displayKey = key;
     visibleItems = items;
     destroyChart();
     destroyChart = renderChart(body, items, mode, modeSelect);
@@ -194,7 +199,10 @@ export function run() {
   });
   function showMessage(text) { message.textContent = text; message.hidden = !text; }
   async function load(force = false) {
+    const selectionKey = `${media}:${status}`;
+    if (!force && loadingKey === selectionKey && !controller?.signal.aborted) return;
     const current = ++generation;
+    loadingKey = null;
     controller?.abort();
     controller = new AbortController();
     const signal = controller.signal;
@@ -202,12 +210,13 @@ export function run() {
     const saved = tasks.map(task => cache.read(task.media, task.status));
     const hasAll = saved.every(Boolean);
     if (hasAll) display(saved.flatMap(data => data.items));
-    else { visibleItems = null; destroyChart(); body.replaceChildren(); }
+    else { displayKey = null; visibleItems = null; destroyChart(); body.replaceChildren(); }
     if (!force && hasAll && saved.every(data => data.fresh)) {
       refresh.disabled = false;
       showMessage('');
       return;
     }
+    loadingKey = selectionKey;
     refresh.disabled = true;
     showMessage(hasAll ? '更新中…' : '加载中…');
     let cursor = 0;
@@ -236,7 +245,7 @@ export function run() {
       controller.abort();
       showMessage(hasAll ? '更新失败，显示上次结果。请点击刷新重试。' : (error.message || '加载失败，请点击刷新重试。'));
     } finally {
-      if (current === generation) refresh.disabled = false;
+      if (current === generation) { loadingKey = null; refresh.disabled = false; }
     }
   }
   mediaSelect.addEventListener('change', () => { media = mediaSelect.value; status = 'all'; updateStatusOptions(); updateTabs(); load(); });
@@ -254,14 +263,16 @@ export function run() {
         const current = JSON.stringify(fingerprint());
         if (current === previous) return;
         previous = current;
-        cache.invalidate(route.media);
+        cache.invalidate(route.media, route.status);
+        checkCurrentPage();
+        loadingKey = null;
         load();
       }, 500);
     });
     observer.observe(list, { childList: true, subtree: true, characterData: true });
   }
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') { checkCurrentPage(); load(); }
+    if (document.visibilityState === 'visible') { if (checkCurrentPage()) loadingKey = null; load(); }
   });
   window.addEventListener('pageshow', event => { if (event.persisted) { alive = true; checkCurrentPage(); load(); } });
   window.addEventListener('pagehide', () => { alive = false; controller?.abort(); clearTimeout(timer); });
