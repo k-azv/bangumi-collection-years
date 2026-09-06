@@ -57,8 +57,7 @@ export function createHistogram(data, mode) {
   const output = node('output', { 'aria-live': 'polite' });
   const next = node('button', { type: 'button' }, '›');
   detail.append(previous, output, next);
-  const expand = node('button', { type: 'button', class: 'bgmcy-open-decade' });
-  root.append(nav, plot, detail, expand);
+  root.append(nav, plot, detail);
   let decade = null;
   let rows = histogramRows(data.rows, mode);
   let selected = rows.findLast(row => row.count > 0)?.year ?? rows[0].year;
@@ -73,7 +72,6 @@ export function createHistogram(data, mode) {
     next.disabled = selected === rows.at(-1).year;
     previous.setAttribute('aria-label', grouped ? '前一个年代' : '前一年');
     next.setAttribute('aria-label', grouped ? '后一个年代' : '后一年');
-    expand.textContent = `查看 ${selected}—${selected + 9} 各年`;
     svg.querySelectorAll('.bgmcy-column').forEach(bar => bar.classList.toggle('is-selected', Number(bar.dataset.year) === row.year));
   }
   function draw() {
@@ -87,7 +85,6 @@ export function createHistogram(data, mode) {
     const max = Math.max(1, ...rows.map(row => row.count));
     period.textContent = `${rows[0].year}—${rows.at(-1).year + (grouped ? 9 : 0)}`;
     back.hidden = !grouped && mode === 'decade' ? false : true;
-    expand.hidden = !grouped;
     targets.replaceChildren();
     targets.style.gridTemplateColumns = `repeat(${rows.length}, minmax(0, 1fr))`;
     svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
@@ -108,7 +105,7 @@ export function createHistogram(data, mode) {
         const button = node('button', { type: 'button', 'aria-label': description, 'data-year': row.year });
         button.addEventListener('focus', () => { hovered = null; selected = row.year; updateSelection(); });
         button.addEventListener('pointerenter', event => { if (event.pointerType === 'mouse') { hovered = row.year; updateSelection(); } });
-        button.addEventListener('click', () => { hovered = null; selected = row.year; updateSelection(); });
+        button.addEventListener('click', () => { hovered = null; selected = row.year; if (grouped) openDecade(); else updateSelection(); });
         targets.append(button);
       }
       svg.append(svgNode('rect', { x, y: top + plotHeight - h, width: Math.max(.1, step - gap), height: h,
@@ -135,7 +132,6 @@ export function createHistogram(data, mode) {
   }
   previous.addEventListener('click', () => stepSelection(-1));
   next.addEventListener('click', () => stepSelection(1));
-  expand.addEventListener('click', openDecade);
   back.addEventListener('click', () => { hovered = null; selected = decade; decade = null; draw(); });
   targets.addEventListener('pointerleave', () => { hovered = null; updateSelection(); });
   root.addEventListener('keydown', event => {

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bangumi 作品年份分布
 // @namespace    https://github.com/k-azv/bangumi-collection-years
-// @version      0.3.8
+// @version      0.3.9
 // @description  按作品发行年份查看动画、书籍、音乐、游戏与三次元收藏
 // @author       k-azv
 // @include      /^https?:\/\/(bgm\.tv|bangumi\.tv|chii\.in)\/user\/[^/?#]+\/?$/
@@ -355,8 +355,7 @@
     const output = node("output", { "aria-live": "polite" });
     const next = node("button", { type: "button" }, "\u203A");
     detail.append(previous, output, next);
-    const expand = node("button", { type: "button", class: "bgmcy-open-decade" });
-    root.append(nav, plot, detail, expand);
+    root.append(nav, plot, detail);
     let decade = null;
     let rows = histogramRows(data.rows, mode);
     let selected = rows.findLast((row) => row.count > 0)?.year ?? rows[0].year;
@@ -370,7 +369,6 @@
       next.disabled = selected === rows.at(-1).year;
       previous.setAttribute("aria-label", grouped ? "\u524D\u4E00\u4E2A\u5E74\u4EE3" : "\u524D\u4E00\u5E74");
       next.setAttribute("aria-label", grouped ? "\u540E\u4E00\u4E2A\u5E74\u4EE3" : "\u540E\u4E00\u5E74");
-      expand.textContent = `\u67E5\u770B ${selected}\u2014${selected + 9} \u5404\u5E74`;
       svg.querySelectorAll(".bgmcy-column").forEach((bar) => bar.classList.toggle("is-selected", Number(bar.dataset.year) === row.year));
     }
     function draw() {
@@ -384,7 +382,6 @@
       const max = Math.max(1, ...rows.map((row) => row.count));
       period.textContent = `${rows[0].year}\u2014${rows.at(-1).year + (grouped ? 9 : 0)}`;
       back.hidden = !grouped && mode === "decade" ? false : true;
-      expand.hidden = !grouped;
       targets.replaceChildren();
       targets.style.gridTemplateColumns = `repeat(${rows.length}, minmax(0, 1fr))`;
       svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
@@ -419,7 +416,8 @@
           button.addEventListener("click", () => {
             hovered = null;
             selected = row.year;
-            updateSelection();
+            if (grouped) openDecade();
+            else updateSelection();
           });
           targets.append(button);
         }
@@ -454,7 +452,6 @@
     }
     previous.addEventListener("click", () => stepSelection(-1));
     next.addEventListener("click", () => stepSelection(1));
-    expand.addEventListener("click", openDecade);
     back.addEventListener("click", () => {
       hovered = null;
       selected = decade;

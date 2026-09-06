@@ -96,8 +96,7 @@ it('三种图表共用数据，年代展开与返回正确，切换保存偏好�
  expect(doc.querySelector('.bgmcy-chart-detail').hidden).toBe(false);
  expect(doc.querySelector('.bgmcy-chart-detail output').textContent).toBeTruthy();
  doc.querySelector('.bgmcy-plot-targets button[data-year="2000"]').click();
- expect(doc.querySelectorAll('.bgmcy-column')).toHaveLength(5);
- doc.querySelector('.bgmcy-open-decade').click();
+ expect(doc.querySelector('.bgmcy-open-decade')).toBeNull();
  expect(doc.querySelector('.bgmcy-chart-detail output').textContent).toBeTruthy();
  expect(doc.querySelectorAll('.bgmcy-column')).toHaveLength(10);expect(sum()).toBe(3);
  expect(doc.querySelector('.bgmcy-chart-detail output').textContent).toBe('2009 年 · 2 部 · 40.0%');

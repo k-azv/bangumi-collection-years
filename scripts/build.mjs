@@ -4,7 +4,7 @@ import { copyFile, mkdir } from 'node:fs/promises';
 const banner = `// ==UserScript==
 // @name         Bangumi 作品年份分布
 // @namespace    https://github.com/k-azv/bangumi-collection-years
-// @version      0.3.8
+// @version      0.3.9
 // @description  按作品发行年份查看动画、书籍、音乐、游戏与三次元收藏
 // @author       k-azv
 // @include      /^https?:\\/\\/(bgm\\.tv|bangumi\\.tv|chii\\.in)\\/user\\/[^/?#]+\\/?$/
