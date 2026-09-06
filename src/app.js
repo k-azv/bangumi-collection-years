@@ -158,6 +158,7 @@ export function run() {
   if (typeof ResizeObserver !== 'undefined') new ResizeObserver(alignTabs).observe(filters);
   alignTabs();
 
+  const itemIndexes = new WeakMap();
   function checkCurrentPage() {
     const affected = new Set();
     // Counts on the profile and status tabs detect additions/removals between visits.
@@ -165,13 +166,21 @@ export function run() {
       const linked = parseRoute(new URL(link.href, location.origin).pathname);
       if (!linked?.status || linked.username !== route.username) continue;
       const count = link.textContent.match(/(?:\(|\s)(\d+)\)?\s*$/)?.[1];
+      if (count === undefined) continue;
       const saved = cache.read(linked.media, linked.status);
       if (saved && count !== undefined && Number(count) !== saved.items.length) affected.add(`${linked.media}:${linked.status}`);
     }
     if (route.kind === 'list' && route.status) {
       const saved = cache.read(route.media, route.status);
       const current = parseCollectionDocument(document, route.media, route.status);
-      if (saved && current.some(item => !saved.items.some(old => old.subjectId === item.subjectId && old.private === item.private && (!item.year || old.year === item.year)))) affected.add(`${route.media}:${route.status}`);
+      if (saved) {
+        let index = itemIndexes.get(saved.items);
+        if (!index) { index = new Map(saved.items.map(item => [item.subjectId, item])); itemIndexes.set(saved.items, index); }
+        if (current.some(item => {
+          const old = index.get(item.subjectId);
+          return !old || old.private !== item.private || (item.year && old.year !== item.year);
+        })) affected.add(`${route.media}:${route.status}`);
+      }
     }
     for (const key of affected) cache.invalidate(...key.split(':'));
     return affected.size > 0;
@@ -183,19 +192,23 @@ export function run() {
   let controller;
   let alive = true;
   let visibleItems = null;
+  let visibleParts = null;
   let destroyChart = () => {};
-  function display(items) {
-    const key = JSON.stringify([media, status, mode, items]);
-    if (key === displayKey) return;
+  function display(parts) {
+    const key = `${media}:${status}:${mode}`;
+    const same = visibleParts?.length === parts.length && parts.every((part, i) => part === visibleParts[i]);
+    if (key === displayKey && same) return;
     displayKey = key;
-    visibleItems = items;
+    if (!same) visibleItems = parts.flat();
+    visibleParts = parts;
+    const items = visibleItems;
     destroyChart();
     destroyChart = renderChart(body, items, mode, modeSelect);
   }
   modeSelect.addEventListener('change', () => {
     mode = modeSelect.value;
     saveChartMode(storage, mode);
-    if (visibleItems !== null) display(visibleItems);
+    if (visibleItems !== null) display(visibleParts);
   });
   function showMessage(text) { message.textContent = text; message.hidden = !text; }
   async function load(force = false) {
@@ -209,8 +222,8 @@ export function run() {
     const tasks = tasksForSelection(media, status);
     const saved = tasks.map(task => cache.read(task.media, task.status));
     const hasAll = saved.every(Boolean);
-    if (hasAll) display(saved.flatMap(data => data.items));
-    else { displayKey = null; visibleItems = null; destroyChart(); body.replaceChildren(); }
+    if (hasAll) display(saved.map(data => data.items));
+    else { displayKey = null; visibleItems = null; visibleParts = null; destroyChart(); body.replaceChildren(); }
     if (!force && hasAll && saved.every(data => data.fresh)) {
       refresh.disabled = false;
       showMessage('');
@@ -231,14 +244,13 @@ export function run() {
             const items = await fetchCollectionPages({ ...task, username: route.username, signal });
             const completed = await completeSubjectDates(items, { signal });
             if (signal.aborted) return;
-            cache.write(task.media, task.status, completed);
-            results[index] = completed;
+            results[index] = cache.write(task.media, task.status, completed);
           }
         }
       }
       await Promise.all(Array.from({ length: Math.min(3, tasks.length) }, worker));
       if (current !== generation || !alive) return;
-      display(results.flat());
+      display(results);
       showMessage('');
     } catch (error) {
       if (current !== generation || !alive) return;

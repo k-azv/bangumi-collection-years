@@ -47,3 +47,16 @@ it('持久缓存容量受限并清理长期过期记录',()=>{
  expect(storage.getItem('bgmcy:v2:guest:old:anime:collect')).toBeNull();
  expect(storage.getItem('other-app')).toBe('keep');
 });
+it('重复读取复用解析数据，并识别其他页面的更新和删除',()=>{
+ const storage=new JSDOM('',{url:'https://bgm.tv'}).window.localStorage;
+ const key='bgmcy:v2:kazv:kazv:anime:collect';
+ const cache=createCache(storage,'kazv','kazv',()=>1000);
+ cache.write('anime','collect',[item]);
+ const first=cache.read('anime','collect').items;
+ expect(cache.read('anime','collect').items).toBe(first);
+ expect(cache.write('anime','collect',[{...item}])).toBe(first);
+ storage.setItem(key,JSON.stringify({at:1001,items:[{...item,year:2023}]}));
+ expect(cache.read('anime','collect').items[0].year).toBe(2023);
+ storage.removeItem(key);
+ expect(cache.read('anime','collect')).toBeNull();
+});

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bangumi 作品年份分布
 // @namespace    https://github.com/k-azv/bangumi-collection-years
-// @version      0.3.6
+// @version      0.3.7
 // @description  按作品发行年份查看动画、书籍、音乐、游戏与三次元收藏
 // @author       k-azv
 // @include      /^https?:\/\/(bgm\.tv|bangumi\.tv|chii\.in)\/user\/[^/?#]+\/?$/
@@ -177,24 +177,34 @@
     const scope = `${PREFIX}${encodeURIComponent(viewer || "guest")}:${encodeURIComponent(username)}:`;
     const memory = /* @__PURE__ */ new Map();
     const key = (media, status) => `${scope}${media}:${status}`;
+    const parsed = /* @__PURE__ */ new Map();
     function read(media, status) {
+      const name = key(media, status);
+      let raw;
       try {
-        const name = key(media, status);
-        let raw;
-        try {
-          raw = storage?.getItem(name);
-        } catch {
-        }
-        const disk = raw ? JSON.parse(raw) : null;
-        const ram = memory.get(name);
-        const data = ram && (!disk || ram.at >= disk.at) ? ram : disk;
-        if (!data || !Number.isFinite(data.at) || !Array.isArray(data.items) || !data.items.every((item) => item.media === media && item.status === status && /^\d+$/.test(item.subjectId) && (item.year === null || Number.isInteger(item.year)))) return null;
-        return { ...data, fresh: now() >= data.at && now() - data.at < CACHE_TTL };
+        raw = storage?.getItem(name);
       } catch {
-        return null;
       }
+      const ram = memory.get(name);
+      let disk = null;
+      if (raw) {
+        const previous = parsed.get(name);
+        if (previous?.raw === raw) disk = previous.data;
+        else {
+          try {
+            const data2 = JSON.parse(raw);
+            if (data2 && Number.isFinite(data2.at) && Array.isArray(data2.items) && data2.items.every((item) => item.media === media && item.status === status && /^\d+$/.test(item.subjectId) && (item.year === null || Number.isInteger(item.year)))) disk = data2;
+          } catch {
+          }
+          parsed.set(name, { raw, data: disk });
+        }
+      } else parsed.delete(name);
+      const data = ram && (!disk || ram.at >= disk.at) ? ram : disk;
+      return data ? { ...data, fresh: now() >= data.at && now() - data.at < CACHE_TTL } : null;
     }
     function write(media, status, items) {
+      const old = read(media, status);
+      if (old && JSON.stringify(old.items) === JSON.stringify(items)) items = old.items;
       const data = { at: now(), items };
       memory.set(key(media, status), data);
       try {
@@ -213,13 +223,17 @@
         entries.forEach((entry, index) => {
           if (index >= 49 || now() - entry.at > 7 * 24 * 60 * 60 * 1e3) storage.removeItem(entry.name);
         });
-        storage.setItem(key(media, status), JSON.stringify(data));
+        const raw = JSON.stringify(data);
+        storage.setItem(key(media, status), raw);
+        parsed.set(key(media, status), { raw, data });
+        memory.delete(key(media, status));
       } catch {
       }
+      return items;
     }
     function invalidate(media, status) {
       const matches = (name) => status ? name === key(media, status) : name.startsWith(`${scope}${media}:`);
-      for (const name of memory.keys()) if (matches(name)) memory.delete(name);
+      for (const map of [memory, parsed]) for (const name of map.keys()) if (matches(name)) map.delete(name);
       try {
         for (let i = storage.length - 1; i >= 0; i--) {
           const name = storage.key(i);
@@ -576,19 +590,31 @@
     };
     if (typeof ResizeObserver !== "undefined") new ResizeObserver(alignTabs).observe(filters);
     alignTabs();
+    const itemIndexes = /* @__PURE__ */ new WeakMap();
     function checkCurrentPage() {
       const affected = /* @__PURE__ */ new Set();
       for (const link of document.querySelectorAll('a[href*="/list/"]')) {
         const linked = parseRoute(new URL(link.href, location.origin).pathname);
         if (!linked?.status || linked.username !== route.username) continue;
         const count = link.textContent.match(/(?:\(|\s)(\d+)\)?\s*$/)?.[1];
+        if (count === void 0) continue;
         const saved = cache.read(linked.media, linked.status);
         if (saved && count !== void 0 && Number(count) !== saved.items.length) affected.add(`${linked.media}:${linked.status}`);
       }
       if (route.kind === "list" && route.status) {
         const saved = cache.read(route.media, route.status);
         const current = parseCollectionDocument(document, route.media, route.status);
-        if (saved && current.some((item) => !saved.items.some((old) => old.subjectId === item.subjectId && old.private === item.private && (!item.year || old.year === item.year)))) affected.add(`${route.media}:${route.status}`);
+        if (saved) {
+          let index = itemIndexes.get(saved.items);
+          if (!index) {
+            index = new Map(saved.items.map((item) => [item.subjectId, item]));
+            itemIndexes.set(saved.items, index);
+          }
+          if (current.some((item) => {
+            const old = index.get(item.subjectId);
+            return !old || old.private !== item.private || item.year && old.year !== item.year;
+          })) affected.add(`${route.media}:${route.status}`);
+        }
       }
       for (const key of affected) cache.invalidate(...key.split(":"));
       return affected.size > 0;
@@ -600,20 +626,24 @@
     let controller;
     let alive = true;
     let visibleItems = null;
+    let visibleParts = null;
     let destroyChart = () => {
     };
-    function display(items) {
-      const key = JSON.stringify([media, status, mode, items]);
-      if (key === displayKey) return;
+    function display(parts) {
+      const key = `${media}:${status}:${mode}`;
+      const same = visibleParts?.length === parts.length && parts.every((part, i) => part === visibleParts[i]);
+      if (key === displayKey && same) return;
       displayKey = key;
-      visibleItems = items;
+      if (!same) visibleItems = parts.flat();
+      visibleParts = parts;
+      const items = visibleItems;
       destroyChart();
       destroyChart = renderChart(body, items, mode, modeSelect);
     }
     modeSelect.addEventListener("change", () => {
       mode = modeSelect.value;
       saveChartMode(storage, mode);
-      if (visibleItems !== null) display(visibleItems);
+      if (visibleItems !== null) display(visibleParts);
     });
     function showMessage(text) {
       message.textContent = text;
@@ -630,10 +660,11 @@
       const tasks = tasksForSelection(media, status);
       const saved = tasks.map((task) => cache.read(task.media, task.status));
       const hasAll = saved.every(Boolean);
-      if (hasAll) display(saved.flatMap((data) => data.items));
+      if (hasAll) display(saved.map((data) => data.items));
       else {
         displayKey = null;
         visibleItems = null;
+        visibleParts = null;
         destroyChart();
         body.replaceChildren();
       }
@@ -657,14 +688,13 @@
               const items = await fetchCollectionPages({ ...task, username: route.username, signal });
               const completed = await completeSubjectDates(items, { signal });
               if (signal.aborted) return;
-              cache.write(task.media, task.status, completed);
-              results[index] = completed;
+              results[index] = cache.write(task.media, task.status, completed);
             }
           }
         }
         await Promise.all(Array.from({ length: Math.min(3, tasks.length) }, worker));
         if (current !== generation || !alive) return;
-        display(results.flat());
+        display(results);
         showMessage("");
       } catch (error) {
         if (current !== generation || !alive) return;
