@@ -123,7 +123,7 @@ export async function fetchCollectionPages({ media, username, status, fetchImpl 
         });
         if (response.ok || response.status < 500 || attempt === 2) break;
       } catch (error) {
-        if (signal?.aborted || attempt === 2) throw error;
+        if (signal?.aborted || error.retryAt || attempt === 2) throw error;
       }
       await new Promise(resolve => setTimeout(resolve, 250 * (2 ** attempt)));
     }
@@ -157,7 +157,7 @@ export async function fetchCollectionPages({ media, username, status, fetchImpl 
   return pages.flat();
 }
 
-export function createRequestQueue(signal, limit = 4, fetchImpl = fetch) {
+export function createRequestQueue(signal, limit = 4, fetchImpl = fetch, { timeout = 15000 } = {}) {
   let active = 0;
   const waiting = [];
   function pump() {
@@ -168,7 +168,7 @@ export function createRequestQueue(signal, limit = 4, fetchImpl = fetch) {
       const controller = new AbortController();
       const abort = () => controller.abort(signal.reason);
       signal?.addEventListener('abort', abort, { once: true });
-      const timer = setTimeout(() => controller.abort(new Error('请求超时，请重试')), 15000);
+      const timer = timeout ? setTimeout(() => controller.abort(new Error('请求超时，请重试')), timeout) : null;
       (async () => {
         try {
           const response = await fetchImpl(url, { ...options, signal: controller.signal });

@@ -63,6 +63,7 @@ export function createHistogram(data, mode) {
   let selected = rows.findLast(row => row.count > 0)?.year ?? rows[0].year;
   let hovered = null;
   let disposed = false;
+  let drawnWidth = null;
 
   function updateSelection() {
     const grouped = mode === 'decade' && decade === null;
@@ -79,6 +80,7 @@ export function createHistogram(data, mode) {
     rows = histogramRows(data.rows, mode, decade);
     const grouped = mode === 'decade' && decade === null;
     const width = svg.getBoundingClientRect().width || 250;
+      drawnWidth = width;
     const height = 196, left = 32, right = 8, top = 25, bottom = 38;
     const plotWidth = Math.max(1, width - left - right), plotHeight = height - top - bottom;
     const step = plotWidth / rows.length;
@@ -139,7 +141,10 @@ export function createHistogram(data, mode) {
     event.preventDefault();
     stepSelection(event.key === 'ArrowLeft' ? -1 : 1);
   });
-  const observer = typeof ResizeObserver === 'function' ? new ResizeObserver(draw) : null;
+  const observer = typeof ResizeObserver === 'function' ? new ResizeObserver(() => {
+      const width = svg.getBoundingClientRect().width || 250;
+      if (width !== drawnWidth) draw();
+    }) : null;
   observer?.observe(svg);
   draw();
   return { root, destroy() { disposed = true; observer?.disconnect(); } };

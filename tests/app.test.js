@@ -51,7 +51,7 @@ it('收藏概览页在通用侧栏自动显示当前类别的全部状态', asyn
   dom=new JSDOM('<div id="columnA"></div><div id="columnB"></div>',{url:'https://bgm.tv/game/list/kazv',runScripts:'outside-only'});
   dom.window.fetch=vi.fn(async()=>({ok:true,text:async()=>'<ul id="browserItemList"></ul>'}));
   dom.window.eval(readFileSync('dist/gadget.js','utf8'));
-  await vi.waitFor(()=>expect(dom.window.document.querySelector('.bgmcy-summary')?.textContent).toContain('0'));
+  await vi.waitFor(()=>expect(dom.window.document.querySelector('.bgmcy-summary')?.textContent).toContain('0'),{timeout:3000});
   expect(dom.window.document.querySelector('#columnB #bgm-collection-years')).not.toBeNull();
   expect(dom.window.fetch).toHaveBeenCalledTimes(5);
   expect(dom.window.document.querySelector('[aria-label="收藏状态"]').value).toBe('all');
@@ -70,7 +70,7 @@ it('个人页先限定具体类别，并在类别切换后提供原生状态', a
   dom=new JSDOM('<div id="user_home"></div><div id="columnB"></div>',{url:'https://bgm.tv/user/kazv',runScripts:'outside-only'});
   dom.window.fetch=vi.fn(async()=>({ok:true,text:async()=>'<ul id="browserItemList"></ul>'}));
   dom.window.eval(readFileSync('dist/gadget.js','utf8'));
-  await vi.waitFor(()=>expect(dom.window.document.querySelector('.bgmcy-summary')?.textContent).toContain('0'));
+  await vi.waitFor(()=>expect(dom.window.document.querySelector('.bgmcy-summary')?.textContent).toContain('0'),{timeout:3000});
   const category=dom.window.document.querySelector('[aria-label="收藏类别"]');
   const state=dom.window.document.querySelector('[aria-label="收藏状态"]');
   expect([...category.options].map(o=>o.value)).toEqual(['book','anime','music','game','real']);
@@ -80,7 +80,7 @@ it('个人页先限定具体类别，并在类别切换后提供原生状态', a
   [...dom.window.document.querySelectorAll('.bgmcy-states button')].find(b=>b.textContent==='在看').click();
   expect(state.value).toBe('do');
   [...dom.window.document.querySelectorAll('.bgmcy-categories button')].find(b=>b.textContent==='游戏').click();
-  await vi.waitFor(()=>expect(dom.window.document.querySelector('.bgmcy-summary')?.textContent).toContain('0'));
+  await vi.waitFor(()=>expect(dom.window.document.querySelector('.bgmcy-summary')?.textContent).toContain('0'),{timeout:3000});
   expect(state.value).toBe('all');
   expect([...state.options].map(o=>o.textContent)).toEqual(['概览','想玩','玩过','在玩','搁置','抛弃']);
 });
@@ -123,7 +123,7 @@ it('加载期间切回标签页复用请求，缓存命中保留图表选择', a
  dom.window.fetch=vi.fn(()=>new Promise(resolve=>{finish=resolve;}));
  dom.window.eval(readFileSync('dist/gadget.js','utf8'));
  for(let i=0;i<3;i++)dom.window.document.dispatchEvent(new dom.window.Event('visibilitychange'));
- expect(dom.window.fetch).toHaveBeenCalledTimes(1);
+ await vi.waitFor(()=>expect(dom.window.fetch).toHaveBeenCalledTimes(1));
  finish({ok:true,text:async()=>'<ul id="browserItemList"><li id="item_1"><p class="info tip">2022-01-01</p></li></ul>'});
  await vi.waitFor(()=>expect(dom.window.document.querySelector('.bgmcy-histogram')).not.toBeNull());
  const chart=dom.window.document.querySelector('.bgmcy-histogram');
@@ -147,10 +147,11 @@ it('加载中切换到缓存状态再返回可正常重启原状态请求',async
  dom.window.localStorage.setItem('bgmcy:v2:guest:kazv:anime:do',JSON.stringify({at:Date.now(),items:[]}));
  dom.window.fetch=vi.fn((url,{signal})=>new Promise((resolve,reject)=>signal.addEventListener('abort',()=>reject(new Error('aborted')))));
  dom.window.eval(readFileSync('dist/gadget.js','utf8'));
+ await vi.waitFor(()=>expect(dom.window.fetch).toHaveBeenCalledTimes(1));
  const select=dom.window.document.querySelector('[aria-label="收藏状态"]');
  select.value='do';select.dispatchEvent(new dom.window.Event('change'));
  select.value='collect';select.dispatchEvent(new dom.window.Event('change'));
- expect(dom.window.fetch).toHaveBeenCalledTimes(2);
+ await vi.waitFor(()=>expect(dom.window.fetch).toHaveBeenCalledTimes(2));
 });
 it('刷新返回相同内容保留图表，外部缓存更新显示新数据',async()=>{
  dom=new JSDOM('<div id="columnSubjectBrowserA"></div><div id="columnSubjectBrowserB"></div>',{url:'https://bgm.tv/anime/list/kazv/collect',runScripts:'outside-only',pretendToBeVisual:true});
@@ -160,7 +161,7 @@ it('刷新返回相同内容保留图表，外部缓存更新显示新数据',as
  const chart=dom.window.document.querySelector('.bgmcy-histogram');
  dom.window.document.querySelector('.bgmcy-refresh').click();
  await vi.waitFor(()=>expect(dom.window.document.querySelector('.bgmcy-refresh').disabled).toBe(false));
- expect(dom.window.fetch).toHaveBeenCalledTimes(2);
+ await vi.waitFor(()=>expect(dom.window.fetch).toHaveBeenCalledTimes(2));
  expect(dom.window.document.querySelector('.bgmcy-histogram')).toBe(chart);
  dom.window.localStorage.setItem('bgmcy:v2:guest:kazv:anime:collect',JSON.stringify({at:Date.now(),items:[]}));
  dom.window.document.dispatchEvent(new dom.window.Event('visibilitychange'));

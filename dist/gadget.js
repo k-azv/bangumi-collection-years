@@ -89,7 +89,7 @@
           });
           if (response.ok || response.status < 500 || attempt === 2) break;
         } catch (error) {
-          if (signal?.aborted || attempt === 2) throw error;
+          if (signal?.aborted || error.retryAt || attempt === 2) throw error;
         }
         await new Promise((resolve) => setTimeout(resolve, 250 * 2 ** attempt));
       }
@@ -122,7 +122,7 @@
     await Promise.all(Array.from({ length: 3 }, worker));
     return pages.flat();
   }
-  function createRequestQueue(signal, limit = 4, fetchImpl = fetch) {
+  function createRequestQueue(signal, limit = 4, fetchImpl = fetch, { timeout = 15e3 } = {}) {
     let active = 0;
     const waiting = [];
     function pump() {
@@ -136,7 +136,7 @@
         const controller = new AbortController();
         const abort = () => controller.abort(signal.reason);
         signal?.addEventListener("abort", abort, { once: true });
-        const timer = setTimeout(() => controller.abort(new Error("\u8BF7\u6C42\u8D85\u65F6\uFF0C\u8BF7\u91CD\u8BD5")), 15e3);
+        const timer = timeout ? setTimeout(() => controller.abort(new Error("\u8BF7\u6C42\u8D85\u65F6\uFF0C\u8BF7\u91CD\u8BD5")), timeout) : null;
         (async () => {
           try {
             const response = await fetchImpl(url, { ...options, signal: controller.signal });
@@ -216,11 +216,127 @@
     };
   }
 
+  // src/network.js
+  var PREFIX = "bgmcy:network:";
+  var INTERVAL = 250;
+  function createNetwork({ storage, locks, fetchImpl = fetch, now = Date.now, random = Math.random } = {}) {
+    const memory = /* @__PURE__ */ new Map();
+    const pending = /* @__PURE__ */ new Set();
+    let slot = 0;
+    const tails = /* @__PURE__ */ new Map();
+    function read(key) {
+      if (pending.has(key)) return memory.get(key);
+      try {
+        const value = JSON.parse(storage?.getItem(PREFIX + key) || "null");
+        if (value) return value;
+      } catch {
+      }
+      return memory.get(key);
+    }
+    function write(key, value) {
+      memory.set(key, value);
+      try {
+        storage?.setItem(PREFIX + key, JSON.stringify(value));
+        pending.delete(key);
+      } catch {
+        pending.add(key);
+      }
+    }
+    function lock(name, signal, work) {
+      if (signal?.aborted) return Promise.reject(signal.reason);
+      if (locks) return locks.request(PREFIX + name, { signal }, work);
+      const previous = tails.get(name) || Promise.resolve();
+      const next = previous.catch(() => {
+      }).then(() => {
+        if (signal?.aborted) throw signal.reason;
+        return work();
+      });
+      tails.set(name, next);
+      next.finally(() => {
+        if (tails.get(name) === next) tails.delete(name);
+      }).catch(() => {
+      });
+      return next;
+    }
+    function pause(ms, signal) {
+      if (signal?.aborted) return Promise.reject(signal.reason);
+      if (ms <= 0) return Promise.resolve();
+      return new Promise((resolve, reject) => {
+        const abort = () => {
+          clearTimeout(timer);
+          reject(signal.reason);
+        };
+        const timer = setTimeout(() => {
+          signal?.removeEventListener("abort", abort);
+          resolve();
+        }, ms);
+        signal?.addEventListener("abort", abort, { once: true });
+      });
+    }
+    function checkCooldown() {
+      const state = read("cooldown");
+      if (state?.until > now()) {
+        const error = new Error(`\u8BF7\u6C42\u6682\u7F13\uFF08${state.reason}\uFF09\uFF0C\u8BF7\u5728 ${new Date(state.until).toLocaleTimeString()} \u540E\u91CD\u8BD5`);
+        error.retryAt = state.until;
+        throw error;
+      }
+    }
+    function coolDown(reason, retryAfter) {
+      const old = read("cooldown");
+      const failures = Math.min(6, (old?.failures || 0) + 1);
+      const seconds = Number(retryAfter);
+      const serverUntil = retryAfter ? Number.isFinite(seconds) ? now() + seconds * 1e3 : Date.parse(retryAfter) : 0;
+      const until = Math.max(old?.until || 0, serverUntil || 0, now() + Math.min(9e5, 3e4 * 2 ** (failures - 1)) + random() * 1e4);
+      write("cooldown", { until, failures, reason });
+      checkCooldown();
+    }
+    const request = (url, options = {}) => lock(`slot:${slot++ % 4}`, options.signal, async () => {
+      checkCooldown();
+      await lock("start", options.signal, async () => {
+        checkCooldown();
+        await pause(Math.min(INTERVAL, Math.max(0, (read("start") || 0) + INTERVAL - now())), options.signal);
+        checkCooldown();
+        write("start", now());
+      });
+      const controller = new AbortController();
+      const abort = () => controller.abort(options.signal.reason);
+      if (options.signal?.aborted) throw options.signal.reason;
+      options.signal?.addEventListener("abort", abort, { once: true });
+      const timer = setTimeout(() => controller.abort(new Error("\u8BF7\u6C42\u8D85\u65F6")), 15e3);
+      try {
+        const response = await fetchImpl(url, { ...options, signal: controller.signal });
+        if ([401, 403, 429].includes(response.status) || response.status >= 500) {
+          await response.body?.cancel().catch(() => {
+          });
+          coolDown(`HTTP ${response.status}`, response.headers?.get("Retry-After"));
+        }
+        const text = await response.text();
+        if (read("cooldown")?.until <= now()) write("cooldown", { until: 0, failures: 0 });
+        return { ok: response.ok, status: response.status, text: async () => text };
+      } catch (error) {
+        if (options.signal?.aborted || error.retryAt) throw error;
+        coolDown(controller.signal.aborted ? "\u8BF7\u6C42\u8D85\u65F6" : "\u7F51\u7EDC\u5F02\u5E38");
+      } finally {
+        clearTimeout(timer);
+        options.signal?.removeEventListener("abort", abort);
+      }
+    });
+    function failed(error) {
+      if (error.retryAt) return error;
+      try {
+        coolDown(error.message || "\u8BFB\u53D6\u5931\u8D25");
+      } catch (paused) {
+        return paused;
+      }
+    }
+    return { request, lock, checkCooldown, failed };
+  }
+
   // src/cache.js
   var CACHE_TTL = 6 * 60 * 60 * 1e3;
-  var PREFIX = "bgmcy:v2:";
+  var PREFIX2 = "bgmcy:v2:";
   function createCache(storage, viewer, username, now = Date.now) {
-    const scope = `${PREFIX}${encodeURIComponent(viewer || "guest")}:${encodeURIComponent(username)}:`;
+    const scope = `${PREFIX2}${encodeURIComponent(viewer || "guest")}:${encodeURIComponent(username)}:`;
     const memory = /* @__PURE__ */ new Map();
     const key = (media, status) => `${scope}${media}:${status}`;
     const parsed = /* @__PURE__ */ new Map();
@@ -254,22 +370,24 @@
       const data = { at: now(), items, pageCount };
       memory.set(key(media, status), data);
       try {
+        const raw = JSON.stringify(data);
+        const budget = 2e6;
+        if (raw.length > budget) return items;
         const entries = [];
-        for (let i = 0; i < storage.length; i++) {
+        for (let i = storage.length - 1; i >= 0; i--) {
           const name = storage.key(i);
-          if (!name?.startsWith(PREFIX)) continue;
-          try {
-            entries.push({ name, at: JSON.parse(storage.getItem(name)).at });
-          } catch {
-            storage.removeItem(name);
-            i--;
-          }
+          if (!name?.startsWith(PREFIX2) || name === key(media, status)) continue;
+          const stored = storage.getItem(name) || "";
+          const at = Number(stored.slice(0, 80).match(/^\s*\{\s*"at"\s*:\s*(\d+(?:\.\d+)?)/)?.[1]);
+          if (!Number.isFinite(at) || now() - at > 7 * 24 * 60 * 60 * 1e3) storage.removeItem(name);
+          else entries.push({ name, at, size: stored.length });
         }
         entries.sort((a, b) => b.at - a.at);
+        let size = raw.length;
         entries.forEach((entry, index) => {
-          if (index >= 49 || now() - entry.at > 7 * 24 * 60 * 60 * 1e3) storage.removeItem(entry.name);
+          if (index >= 49 || size + entry.size > budget) storage.removeItem(entry.name);
+          else size += entry.size;
         });
-        const raw = JSON.stringify(data);
         storage.setItem(key(media, status), raw);
         parsed.set(key(media, status), { raw, data });
         memory.delete(key(media, status));
@@ -361,6 +479,7 @@
     let selected = rows.findLast((row) => row.count > 0)?.year ?? rows[0].year;
     let hovered = null;
     let disposed = false;
+    let drawnWidth = null;
     function updateSelection() {
       const grouped = mode === "decade" && decade === null;
       const row = rows.find((row2) => row2.year === (hovered ?? selected)) || rows[0];
@@ -376,6 +495,7 @@
       rows = histogramRows(data.rows, mode, decade);
       const grouped = mode === "decade" && decade === null;
       const width = svg.getBoundingClientRect().width || 250;
+      drawnWidth = width;
       const height = 196, left = 32, right = 8, top = 25, bottom = 38;
       const plotWidth = Math.max(1, width - left - right), plotHeight = height - top - bottom;
       const step = plotWidth / rows.length;
@@ -467,7 +587,10 @@
       event.preventDefault();
       stepSelection(event.key === "ArrowLeft" ? -1 : 1);
     });
-    const observer = typeof ResizeObserver === "function" ? new ResizeObserver(draw) : null;
+    const observer = typeof ResizeObserver === "function" ? new ResizeObserver(() => {
+      const width = svg.getBoundingClientRect().width || 250;
+      if (width !== drawnWidth) draw();
+    }) : null;
     observer?.observe(svg);
     draw();
     return { root, destroy() {
@@ -518,15 +641,14 @@
     node2.value = value;
     return node2;
   }
-  function renderChart(body, items, mode, modeSelect) {
-    const data = distribution(items);
+  function renderChart(body, data, mode, modeSelect) {
     const summary = element("p", { class: "bgmcy-summary" }, [
       element("strong", { text: String(data.total) }),
       document.createTextNode(" \u90E8\u4F5C\u54C1")
     ]);
     const chart = element("div", { class: "bgmcy-chart", role: "list", "aria-label": "\u5E74\u4EFD\u5206\u5E03" });
     const max = Math.max(1, ...data.rows.map((row) => row.count));
-    for (const row of data.rows) {
+    for (const row of mode === "list" ? data.rows : []) {
       const fill = element("span", { class: "bgmcy-fill" });
       fill.style.width = `${row.count / max * 100}%`;
       const percent = `${Number(row.percent.toFixed(1))}%`;
@@ -566,6 +688,7 @@
     } catch {
     }
     const cache = createCache(storage, viewer, route.username);
+    const network = createNetwork({ storage, locks: navigator.locks });
     let mode = readChartMode(storage);
     let media = route.media || "anime";
     let status = route.status || "all";
@@ -674,6 +797,7 @@
     let alive = true;
     let visibleItems = null;
     let visibleParts = null;
+    let visibleData = null;
     let destroyChart = () => {
     };
     function display(parts) {
@@ -681,11 +805,13 @@
       const same = visibleParts?.length === parts.length && parts.every((part, i) => part === visibleParts[i]);
       if (key === displayKey && same) return;
       displayKey = key;
-      if (!same) visibleItems = parts.flat();
+      if (!same) {
+        visibleItems = parts.flat();
+        visibleData = distribution(visibleItems);
+      }
       visibleParts = parts;
-      const items = visibleItems;
       destroyChart();
-      destroyChart = renderChart(body, items, mode, modeSelect);
+      destroyChart = renderChart(body, visibleData, mode, modeSelect);
     }
     modeSelect.addEventListener("change", () => {
       mode = modeSelect.value;
@@ -704,7 +830,7 @@
       controller?.abort();
       controller = new AbortController();
       const signal = controller.signal;
-      const fetchImpl = createRequestQueue(signal);
+      const fetchImpl = createRequestQueue(signal, 4, network.request, { timeout: 0 });
       const tasks = tasksForSelection(media, status);
       const saved = tasks.map((task) => cache.read(task.media, task.status));
       const hasAll = saved.every(Boolean);
@@ -721,6 +847,14 @@
         showMessage("");
         return;
       }
+      try {
+        network.checkCooldown();
+      } catch (error) {
+        showMessage(error.message);
+        refresh.disabled = false;
+        return;
+      }
+      const started = Date.now();
       loadingKey = selectionKey;
       refresh.disabled = true;
       showMessage(hasAll ? "\u66F4\u65B0\u4E2D\u2026" : "\u52A0\u8F7D\u4E2D\u2026");
@@ -733,10 +867,14 @@
             const task = tasks[index];
             if (!force && saved[index]?.fresh) results[index] = saved[index].items;
             else {
-              const items = await fetchCollectionPages({ ...task, username: route.username, signal, fetchImpl });
-              const completed = await completeSubjectDates(items, { signal, fetchImpl });
-              if (signal.aborted) return;
-              results[index] = cache.write(task.media, task.status, completed, pageCounts.get(`${task.media}:${task.status}`));
+              results[index] = await network.lock(`collection:${encodeURIComponent(viewer || "guest")}:${encodeURIComponent(route.username)}:${task.media}:${task.status}`, signal, async () => {
+                const latest = cache.read(task.media, task.status);
+                if (latest?.fresh && (!force || latest.at >= started)) return latest.items;
+                const items = await fetchCollectionPages({ ...task, username: route.username, signal, fetchImpl });
+                const completed = await completeSubjectDates(items, { signal, fetchImpl });
+                if (signal.aborted) throw signal.reason;
+                return cache.write(task.media, task.status, completed, pageCounts.get(`${task.media}:${task.status}`));
+              });
             }
           }
         }
@@ -746,8 +884,9 @@
         showMessage("");
       } catch (error) {
         if (current !== generation || !alive) return;
+        error = network.failed(error);
         controller.abort();
-        showMessage(hasAll ? "\u66F4\u65B0\u5931\u8D25\uFF0C\u663E\u793A\u4E0A\u6B21\u7ED3\u679C\u3002\u8BF7\u70B9\u51FB\u5237\u65B0\u91CD\u8BD5\u3002" : error.message || "\u52A0\u8F7D\u5931\u8D25\uFF0C\u8BF7\u70B9\u51FB\u5237\u65B0\u91CD\u8BD5\u3002");
+        showMessage((hasAll ? "\u66F4\u65B0\u5931\u8D25\uFF0C\u663E\u793A\u4E0A\u6B21\u7ED3\u679C\u3002" : "") + error.message);
       } finally {
         if (current === generation) {
           loadingKey = null;

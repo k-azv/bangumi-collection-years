@@ -2,6 +2,7 @@ import {
   createRequestQueue, MEDIA, STATUS_LABELS, STATUS_ORDER, completeSubjectDates, distribution,
   fetchCollectionPages, getSignedInUsername, parseCollectionDocument, parseRoute, tasksForSelection,
 } from './core.js';
+import { createNetwork } from './network.js';
 import { createCache } from './cache.js';
 import { CHART_MODES, createHistogram, readChartMode, saveChartMode } from './charts.js';
 
@@ -52,14 +53,13 @@ function select(label, options, value) {
   return node;
 }
 
-function renderChart(body, items, mode, modeSelect) {
-  const data = distribution(items);
+function renderChart(body, data, mode, modeSelect) {
   const summary = element('p', { class: 'bgmcy-summary' }, [
     element('strong', { text: String(data.total) }), document.createTextNode(' 部作品'),
   ]);
   const chart = element('div', { class: 'bgmcy-chart', role: 'list', 'aria-label': '年份分布' });
   const max = Math.max(1, ...data.rows.map(row => row.count));
-  for (const row of data.rows) {
+  for (const row of mode === 'list' ? data.rows : []) {
     const fill = element('span', { class: 'bgmcy-fill' });
     fill.style.width = `${row.count / max * 100}%`;
     const percent = `${Number(row.percent.toFixed(1))}%`;
@@ -97,6 +97,7 @@ export function run() {
   let storage;
   try { storage = window.localStorage; } catch { /* unavailable */ }
   const cache = createCache(storage, viewer, route.username);
+  const network = createNetwork({ storage, locks: navigator.locks });
   let mode = readChartMode(storage);
   let media = route.media || 'anime';
   let status = route.status || 'all';
@@ -197,17 +198,17 @@ export function run() {
   let alive = true;
   let visibleItems = null;
   let visibleParts = null;
+  let visibleData = null;
   let destroyChart = () => {};
   function display(parts) {
     const key = `${media}:${status}:${mode}`;
     const same = visibleParts?.length === parts.length && parts.every((part, i) => part === visibleParts[i]);
     if (key === displayKey && same) return;
     displayKey = key;
-    if (!same) visibleItems = parts.flat();
+    if (!same) { visibleItems = parts.flat(); visibleData = distribution(visibleItems); }
     visibleParts = parts;
-    const items = visibleItems;
     destroyChart();
-    destroyChart = renderChart(body, items, mode, modeSelect);
+    destroyChart = renderChart(body, visibleData, mode, modeSelect);
   }
   modeSelect.addEventListener('change', () => {
     mode = modeSelect.value;
@@ -223,7 +224,7 @@ export function run() {
     controller?.abort();
     controller = new AbortController();
     const signal = controller.signal;
-    const fetchImpl = createRequestQueue(signal);
+    const fetchImpl = createRequestQueue(signal, 4, network.request, { timeout: 0 });
     const tasks = tasksForSelection(media, status);
     const saved = tasks.map(task => cache.read(task.media, task.status));
     const hasAll = saved.every(Boolean);
@@ -234,6 +235,8 @@ export function run() {
       showMessage('');
       return;
     }
+    try { network.checkCooldown(); } catch (error) { showMessage(error.message); refresh.disabled = false; return; }
+    const started = Date.now();
     loadingKey = selectionKey;
     refresh.disabled = true;
     showMessage(hasAll ? '更新中…' : '加载中…');
@@ -246,10 +249,14 @@ export function run() {
           const task = tasks[index];
           if (!force && saved[index]?.fresh) results[index] = saved[index].items;
           else {
-            const items = await fetchCollectionPages({ ...task, username: route.username, signal, fetchImpl });
-            const completed = await completeSubjectDates(items, { signal, fetchImpl });
-            if (signal.aborted) return;
-            results[index] = cache.write(task.media, task.status, completed, pageCounts.get(`${task.media}:${task.status}`));
+            results[index] = await network.lock(`collection:${encodeURIComponent(viewer || 'guest')}:${encodeURIComponent(route.username)}:${task.media}:${task.status}`, signal, async () => {
+              const latest = cache.read(task.media, task.status);
+              if (latest?.fresh && (!force || latest.at >= started)) return latest.items;
+              const items = await fetchCollectionPages({ ...task, username: route.username, signal, fetchImpl });
+              const completed = await completeSubjectDates(items, { signal, fetchImpl });
+              if (signal.aborted) throw signal.reason;
+              return cache.write(task.media, task.status, completed, pageCounts.get(`${task.media}:${task.status}`));
+            });
           }
         }
       }
@@ -259,8 +266,9 @@ export function run() {
       showMessage('');
     } catch (error) {
       if (current !== generation || !alive) return;
+      error = network.failed(error);
       controller.abort();
-      showMessage(hasAll ? '更新失败，显示上次结果。请点击刷新重试。' : (error.message || '加载失败，请点击刷新重试。'));
+      showMessage((hasAll ? '更新失败，显示上次结果。' : '') + error.message);
     } finally {
       if (current === generation) { loadingKey = null; refresh.disabled = false; }
     }

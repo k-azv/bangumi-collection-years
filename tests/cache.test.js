@@ -60,3 +60,11 @@ it('重复读取复用解析数据，并识别其他页面的更新和删除',()
  storage.removeItem(key);
  expect(cache.read('anime','collect')).toBeNull();
 });
+it('缓存写入不会重新解析其他用户的整份收藏',()=>{
+ const storage=new JSDOM('',{url:'https://bgm.tv'}).window.localStorage;
+ const many=Array.from({length:500},(_,i)=>({...item,subjectId:String(i+1)}));
+ for(let i=0;i<30;i++)storage.setItem(`bgmcy:v2:guest:${i}:anime:collect`,JSON.stringify({at:1000,items:many}));
+ const parse=JSON.parse;let parsed=0;JSON.parse=(...args)=>{parsed++;return parse(...args);};
+ try{createCache(storage,'guest','new',()=>1000).write('anime','collect',[item]);}finally{JSON.parse=parse;}
+ expect(parsed).toBeLessThan(3);
+});

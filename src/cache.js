@@ -36,18 +36,26 @@ export function createCache(storage, viewer, username, now = Date.now) {
     const data = { at: now(), items, pageCount };
     memory.set(key(media, status), data);
     try {
+      const raw = JSON.stringify(data);
+      // Budget in UTF-16 code units; the newest result still lives in memory if too large.
+      const budget = 2_000_000;
+      if (raw.length > budget) return items;
       const entries = [];
-      for (let i = 0; i < storage.length; i++) {
+      for (let i = storage.length - 1; i >= 0; i--) {
         const name = storage.key(i);
-        if (!name?.startsWith(PREFIX)) continue;
-        try { entries.push({ name, at: JSON.parse(storage.getItem(name)).at }); }
-        catch { storage.removeItem(name); i--; }
+        if (!name?.startsWith(PREFIX) || name === key(media, status)) continue;
+        const stored = storage.getItem(name) || '';
+        // Our serialized entries begin with at; inspect the header, not every collection item.
+        const at = Number(stored.slice(0, 80).match(/^\s*\{\s*"at"\s*:\s*(\d+(?:\.\d+)?)/)?.[1]);
+        if (!Number.isFinite(at) || now() - at > 7 * 24 * 60 * 60 * 1000) storage.removeItem(name);
+        else entries.push({ name, at, size: stored.length });
       }
       entries.sort((a, b) => b.at - a.at);
+      let size = raw.length;
       entries.forEach((entry, index) => {
-        if (index >= 49 || now() - entry.at > 7 * 24 * 60 * 60 * 1000) storage.removeItem(entry.name);
+        if (index >= 49 || size + entry.size > budget) storage.removeItem(entry.name);
+        else size += entry.size;
       });
-      const raw = JSON.stringify(data);
       storage.setItem(key(media, status), raw);
       parsed.set(key(media, status), { raw, data });
       memory.delete(key(media, status));
